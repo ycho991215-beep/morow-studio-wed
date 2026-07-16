@@ -1,0 +1,186 @@
+{
+  "centerPos": {
+    "x": -10.088,
+    "y": -2.26,
+    "z": -43.89
+  },
+  "baseRotY": 0.9774,
+  "SCALE_START": 0.3,
+  "simDur": 9.5,
+  "waterY": -0.309,
+  "finalScale": 1.05,
+  "waterTrailPath": [
+    {
+      "nx": 0.243,
+      "ny": 0.583,
+      "rotDeg": 52,
+      "scaleMul": 0.2
+    },
+    {
+      "nx": 0.291,
+      "ny": 0.598,
+      "rotDeg": 35,
+      "scaleMul": 0.2
+    },
+    {
+      "nx": 0.282,
+      "ny": 0.603,
+      "rotDeg": 7,
+      "scaleMul": 0.2
+    },
+    {
+      "nx": 0.251,
+      "ny": 0.611,
+      "rotDeg": 5,
+      "scaleMul": 0.22
+    },
+    {
+      "nx": 0.272,
+      "ny": 0.618,
+      "rotDeg": 30,
+      "scaleMul": 0.22
+    },
+    {
+      "nx": 0.328,
+      "ny": 0.622,
+      "rotDeg": 25,
+      "scaleMul": 0.26
+    },
+    {
+      "nx": 0.38,
+      "ny": 0.628,
+      "rotDeg": 22,
+      "scaleMul": 0.28
+    },
+    {
+      "nx": 0.428,
+      "ny": 0.635,
+      "rotDeg": 21,
+      "scaleMul": 0.29
+    },
+    {
+      "nx": 0.489,
+      "ny": 0.653,
+      "rotDeg": 19,
+      "scaleMul": 0.3
+    },
+    {
+      "nx": 0.475,
+      "ny": 0.664,
+      "rotDeg": -9,
+      "scaleMul": 0.3
+    },
+    {
+      "nx": 0.443,
+      "ny": 0.683,
+      "rotDeg": -9,
+      "scaleMul": 0.32
+    },
+    {
+      "nx": 0.456,
+      "ny": 0.69,
+      "rotDeg": 18,
+      "scaleMul": 0.32
+    },
+    {
+      "nx": 0.511,
+      "ny": 0.708,
+      "rotDeg": 22,
+      "scaleMul": 0.33
+    },
+    {
+      "nx": 0.574,
+      "ny": 0.736,
+      "rotDeg": 8,
+      "scaleMul": 0.34
+    },
+    {
+      "nx": 0.599,
+      "ny": 0.767,
+      "rotDeg": -4,
+      "scaleMul": 0.36
+    },
+    {
+      "nx": 0.553,
+      "ny": 0.787,
+      "rotDeg": -4,
+      "scaleMul": 0.38
+    },
+    {
+      "nx": 0.562,
+      "ny": 0.834,
+      "rotDeg": 0,
+      "scaleMul": 0.38
+    },
+    {
+      "nx": 0.525,
+      "ny": 0.916,
+      "rotDeg": -7,
+      "scaleMul": 0.32
+    }
+  ],
+  "water": {
+    "waterTop": 0.56,
+    "perturb": 0.05,
+    "iters": 2,
+    "damping": 0.9885,
+    "wake": {
+      "radius": 12,
+      "strength": 0.015,
+      "spacing": 6
+    },
+    "idle": {
+      "intervalMs": 500,
+      "radius": 13,
+      "strength": 0.012
+    },
+    "mouse": {
+      "radius": 11,
+      "strength": 0.014,
+      "clickRadius": 30,
+      "clickStrength": 0.12
+    },
+    "dualFeet": {
+      "enabled": true,
+      "leftN": {
+        "x": -0.044,
+        "y": -0.0016
+      },
+      "rightN": {
+        "x": 0.044,
+        "y": -0.0016
+      }
+    },
+    "blocker": {
+      "enabled": true,
+      "u": 0.245,
+      "v": 1,
+      "rx": 0.13,
+      "ry": 0.07
+    },
+    "stars": {
+      "count": 230,
+      "brightness": 1.6,
+      "hoverMode": "both",
+      "hoverDist": 160
+    },
+    "oroFloat": {
+      "amp": 0.04,
+      "speed": 0.55
+    }
+  },
+  "pageRing": {
+    "position": {
+      "x": 1.92,
+      "y": -1.15,
+      "z": 1.7
+    },
+    "sphereRadius": 0.27,
+    "ballRotDeg": -20,
+    "ringTilt": 10,
+    "panelScale": 1.15,
+    "panelArc": 55,
+    "ringLift": 0.6
+  },
+  "wheelBottomY": -3.563
+}

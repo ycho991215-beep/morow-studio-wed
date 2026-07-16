@@ -1,0 +1,2514 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>莫羅工作室 | Morow Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600&family=Noto+Sans+TC:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body {
+      width:100%; height:100%;
+      background:#01030d;
+      overflow:hidden;
+      font-family:'Orbitron','Noto Sans TC',sans-serif;
+      color:#fff;
+    }
+
+    /* ── 背景圖 ── */
+    #bg-img {
+      position:fixed; inset:0;
+      width:100%; height:100%;
+      z-index:1;
+      background: url('./site-assets/bg.png?v=2') center center / cover no-repeat;
+    }
+
+    /* ── 水波紋 Canvas（海面下半部，WebGL 折射水面）── */
+    #ripple-canvas {
+      position:fixed; bottom:0; left:0;
+      width:100%; height:52%;
+      z-index:2;
+      pointer-events:none;
+      opacity:0;
+      transition:opacity 0.8s ease;
+    }
+    #ripple-canvas.ready { opacity:1; }
+
+    /* ── 互動星空 Canvas（水平線以上）── */
+    #star-canvas {
+      position:fixed; top:0; left:0;
+      width:100%; height:48%;
+      z-index:2;
+      pointer-events:none;
+    }
+
+    /* ── M 門傳送門（位置/尺寸由 JS 依背景圖對齊；在水面之上）── */
+    #portal-canvas {
+      position:fixed;
+      z-index:2;
+      pointer-events:none;
+      opacity:0;
+      transition:opacity 1.2s ease;
+    }
+    #portal-canvas.ready { opacity:1; }
+
+    /* ── 主題影片全息投影（右上天空，半透明融入場景）── */
+    #sky-video, #sky-video-refl, #sky-video-halo {
+      position:fixed; right:4.5vw;   /* 初始位置；JS 每幀對齊展示球中心線 */
+      width:min(43vw, 800px);
+      pointer-events:none; z-index:2;
+      mix-blend-mode:screen;
+    }
+    /* 影片初始隱藏：展示光束開啟時才淡入＋開始播放 */
+    #sky-video {
+      top:10vh; aspect-ratio:16/9;
+      -webkit-mask-image:radial-gradient(ellipse 72% 68% at 50% 50%, #000 56%, transparent 98%);
+              mask-image:radial-gradient(ellipse 72% 68% at 50% 50%, #000 56%, transparent 98%);
+      filter:saturate(0.95) brightness(1.3) hue-rotate(-4deg);
+      opacity:0;
+    }
+    /* 古董電視開機：中央亮線閃滅 → 垂直展開 → 回彈定格（配合光束閃爍） */
+    #sky-video.on { opacity:0.88; animation:crtOn 1.6s ease-out 0.35s both; }
+    @keyframes crtOn {
+      0%   { opacity:0;    transform:scale(0.30, 0.004); filter:saturate(0) brightness(7); }
+      7%   { opacity:1;    transform:scale(0.85, 0.005); filter:saturate(0) brightness(8); }
+      11%  { opacity:0.15; transform:scale(0.88, 0.005); }
+      16%  { opacity:1;    transform:scale(1.03, 0.006); filter:saturate(0.1) brightness(7); }
+      24%  { opacity:0.4;  transform:scale(1.00, 0.008); }
+      32%  { opacity:1;    transform:scale(1.00, 0.05);  filter:saturate(0.3) brightness(4); }
+      55%  { transform:scale(1, 1.06); filter:saturate(0.8) brightness(1.9) hue-rotate(-4deg); }
+      70%  { transform:scale(1, 0.97); }
+      84%  { transform:scale(1, 1.015); }
+      100% { opacity:0.88; transform:scale(1, 1); filter:saturate(0.95) brightness(1.3) hue-rotate(-4deg); }
+    }
+    #sky-video-halo {
+      top:10vh; aspect-ratio:16/9;
+      background:radial-gradient(ellipse at center,
+        rgba(90,190,255,0.15), rgba(90,190,255,0.05) 55%, transparent 75%);
+      filter:blur(6px);
+      transform:scale(1.16);
+      opacity:0;
+      transition:opacity 2.4s ease;
+    }
+    #sky-video-halo.on { opacity:1; }
+    /* 水面倒影：只要一點點（位置由 JS 依水平線 waterTop 對齊） */
+    #sky-video-refl {
+      top:56vh;
+      height:calc(min(43vw, 800px) * 9 / 16 * 0.42);
+      opacity:0;
+      transition:opacity 2.6s ease;
+      filter:blur(2.5px) saturate(0.7);
+      -webkit-mask-image:linear-gradient(to bottom, rgba(0,0,0,0.85), transparent 85%);
+              mask-image:linear-gradient(to bottom, rgba(0,0,0,0.85), transparent 85%);
+    }
+    #sky-video-refl.on { opacity:0.15; }
+    #sky-video video, #sky-video-refl video {
+      width:100%; height:100%; object-fit:cover; display:block;
+    }
+    #sky-video-refl video { transform:scaleY(-1); }
+
+    /* ── Three.js canvas（透明）── */
+    #three-canvas {
+      position:fixed; inset:0;
+      width:100%; height:100%;
+      z-index:3;
+      pointer-events:none;
+    }
+    #three-canvas.active { pointer-events:all; }
+
+    /* ── CRT 掃描線 ── */
+    #scanlines {
+      position:fixed; inset:0; z-index:8;
+      background:repeating-linear-gradient(0deg,
+        transparent 0px, transparent 3px,
+        rgba(0,242,254,0.005) 3px, rgba(0,242,254,0.005) 4px);
+      pointer-events:none;
+    }
+
+    /* ── 角框 ── */
+    .corner {
+      position:fixed; width:44px; height:44px;
+      border-color:rgba(0,242,254,0.25); border-style:solid;
+      z-index:9; pointer-events:none;
+    }
+    .corner.tl { top:22px; left:22px; border-width:1px 0 0 1px; }
+    .corner.tr { top:22px; right:22px; border-width:1px 1px 0 0; }
+    .corner.bl { bottom:22px; left:22px; border-width:0 0 1px 1px; }
+    .corner.br { bottom:22px; right:22px; border-width:0 1px 1px 0; }
+
+    /* ── HUD ── */
+    #hud { position:fixed; inset:0; z-index:10; pointer-events:none; }
+    #logo-text {
+      position:absolute; top:28px; left:50%; transform:translateX(-50%);
+      font-size:14px; letter-spacing:9px; color:rgba(56,189,248,0.55);
+      text-transform:uppercase; white-space:nowrap;
+    }
+    #logo-line {
+      position:absolute; top:52px; left:50%; transform:translateX(-50%);
+      width:150px; height:1px;
+      background:linear-gradient(90deg,transparent,rgba(0,242,254,0.35),transparent);
+    }
+    #status-bar {
+      position:absolute; left:28px; bottom:38px;
+      display:flex; flex-direction:column; gap:10px;
+    }
+    .s-item { display:flex; align-items:center; gap:7px;
+      font-size:8px; letter-spacing:2px; color:rgba(255,255,255,0.22); }
+    .s-dot { width:4px; height:4px; border-radius:50%; background:#00f2fe;
+      box-shadow:0 0 5px #00f2fe; animation:blip 3s ease-in-out infinite; }
+    .s-dot.d2{animation-delay:1s;} .s-dot.d3{animation-delay:2s;}
+    @keyframes blip{0%,88%,100%{opacity:1}94%{opacity:0.1}}
+
+    #click-hint {
+      position:absolute; bottom:28px; left:50%; transform:translateX(-50%);
+      font-size:9px; letter-spacing:4px; color:rgba(0,242,254,0.45);
+      white-space:nowrap;
+      animation:hint 2.5s ease-in-out infinite;
+    }
+    @keyframes hint{
+      0%,100%{opacity:0.2;transform:translateX(-50%) translateY(0)}
+      50%{opacity:0.7;transform:translateX(-50%) translateY(-4px)}
+    }
+
+    /* ── ORO 佔位（GLB 載入前顯示）── */
+    #oro-placeholder {
+      display:none;   /* 2026-07-14 移除載入時的閃現佔位圖（Eason 指示） */
+      position:fixed; z-index:4; pointer-events:all; cursor:pointer;
+      right:22%; bottom:44%;
+      transform:translateX(50%);
+      opacity:0;
+      transition: opacity 0.8s ease;
+      animation:oroFloat 3s ease-in-out infinite;
+    }
+    #oro-placeholder.show { opacity:1; }
+    #oro-placeholder.hidden { opacity:0 !important; pointer-events:none; }
+    @keyframes oroFloat{0%,100%{transform:translateX(50%) translateY(0)}50%{transform:translateX(50%) translateY(-10px)}}
+
+    /* ── 對話泡泡 ── */
+    #bubble {
+      position:fixed; z-index:20;
+      left:27%; bottom:21%;
+      width:264px; max-height:42vh;
+      background:rgba(3,14,34,0.28);              /* 外框近透明（科技全息感） */
+      backdrop-filter:blur(8px) saturate(1.25);
+      -webkit-backdrop-filter:blur(8px) saturate(1.25);
+      border:1px solid rgba(0,242,254,0.35);
+      border-radius:12px 12px 2px 12px;
+      box-shadow:0 0 30px rgba(0,242,254,0.12), inset 0 0 24px rgba(0,242,254,0.04);
+      display:flex; flex-direction:column;
+      opacity:0; pointer-events:none;
+      transform:scale(0.88) translateY(12px);
+      transform-origin:bottom right;
+      transition:opacity 0.35s ease, transform 0.35s cubic-bezier(0.16,1,0.3,1);
+    }
+    #bubble.open { opacity:1; pointer-events:all; transform:scale(1) translateY(0); }
+    #bubble::after {
+      content:''; position:absolute;
+      right:-8px; bottom:22px;
+      border:5px solid transparent;
+      border-left-color:rgba(0,242,254,0.22);
+    }
+    .bubble-head {
+      padding:14px 16px 12px;
+      border-bottom:1px solid rgba(0,242,254,0.09);
+      display:flex; align-items:center; gap:10px; flex-shrink:0;
+    }
+    .oro-avatar {
+      width:38px; height:38px; border-radius:6px; overflow:hidden; flex-shrink:0;
+      border:1px solid rgba(0,242,254,0.35);
+    }
+    .oro-avatar img { width:100%; height:100%; object-fit:cover; object-position:center top; }
+    .bubble-name { font-size:11px; letter-spacing:2px; color:#00f2fe; }
+    .bubble-status { font-size:9px; color:rgba(255,255,255,0.3); margin-top:2px;
+      font-family:'Noto Sans TC',sans-serif; }
+    #close-bubble {
+      margin-left:auto; background:none; border:none;
+      color:rgba(255,255,255,0.3); font-size:16px; cursor:pointer;
+      width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+      border-radius:4px; transition:color .2s, background .2s;
+    }
+    #close-bubble:hover { color:#00f2fe; background:rgba(0,242,254,0.08); }
+    /* 語音解鎖提示（瀏覽器擋自動播放時出現） */
+    #voice-hint {
+      display:none;
+      margin:0 14px 6px; padding:7px 10px;
+      font-size:11px; color:#ffe9a8; letter-spacing:1px;
+      background:rgba(80,60,8,0.55); border:1px solid rgba(255,210,100,0.45);
+      border-radius:8px; text-align:center;
+      font-family:'Noto Sans TC',sans-serif;
+      animation:hintPulse 1.6s ease-in-out infinite;
+    }
+    #voice-hint.show { display:block; }
+    @keyframes hintPulse { 0%,100% { opacity:0.75; } 50% { opacity:1; } }
+    .bubble-msgs {
+      flex:1; overflow-y:auto; padding:14px;
+      display:flex; flex-direction:column; gap:10px;
+      scrollbar-width:thin; scrollbar-color:rgba(0,242,254,0.12) transparent;
+    }
+    .msg {
+      max-width:90%; padding:10px 13px; border-radius:7px;
+      font-size:12px; line-height:1.65; font-family:'Noto Sans TC',sans-serif; font-weight:300;
+    }
+    .msg.oro {
+      background:rgba(2,13,32,0.74); border:1px solid rgba(0,242,254,0.22);
+      color:rgba(255,255,255,0.9); align-self:flex-start; border-bottom-left-radius:2px;
+    }
+    .msg.user {
+      background:rgba(5,26,50,0.76); border:1px solid rgba(14,165,233,0.3);
+      color:#e0f2fe; align-self:flex-end; border-bottom-right-radius:2px;
+    }
+    .typing { display:flex; gap:4px; padding:8px 0; align-self:flex-start; }
+    .typing span {
+      width:5px; height:5px; border-radius:50%; background:rgba(0,242,254,0.5);
+      animation:tdot 1.1s ease-in-out infinite;
+    }
+    .typing span:nth-child(2){animation-delay:.18s}
+    .typing span:nth-child(3){animation-delay:.36s}
+    @keyframes tdot{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+    .bubble-input {
+      padding:10px 14px 14px;
+      border-top:1px solid rgba(0,242,254,0.09);
+      display:flex; gap:8px; flex-shrink:0;
+    }
+    #chat-in {
+      flex:1; background:rgba(2,13,32,0.7);
+      border:1px solid rgba(0,242,254,0.25); border-radius:5px;
+      padding:9px 12px; color:#fff; font-size:12px; outline:none;
+      font-family:'Noto Sans TC',sans-serif; transition:border-color .2s;
+    }
+    #chat-in::placeholder { color:rgba(255,255,255,0.2); }
+    #chat-in:focus { border-color:rgba(0,242,254,0.42); }
+    #send-btn {
+      width:36px; height:36px; flex-shrink:0;
+      background:linear-gradient(135deg,#0ea5e9,#00f2fe);
+      border:none; border-radius:5px; color:#01030d;
+      font-size:16px; font-weight:bold; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      transition:opacity .2s, transform .1s;
+    }
+    #send-btn:hover{opacity:.85} #send-btn:active{transform:scale(.93)}
+
+    #glb-progress {
+      position:fixed; bottom:20px; right:24px; z-index:30;
+      font-size:9px; letter-spacing:2px; color:rgba(0,242,254,0.35);
+      opacity:0; transition:opacity .4s;
+    }
+    #glb-progress.show { opacity:1; }
+
+    /* ══ 全息環狀頁面選單（DOM CSS-3D，錨定在展示球上方）══ */
+    #holo-ring {
+      position:fixed; z-index:4;
+      width:0; height:0;
+      pointer-events:none;
+    }
+    /* 全息光束：發光點 + 放射漸層錐 + 上升光紋 */
+    #holo-beam {
+      position:absolute; bottom:0; left:0;
+      transform:translateX(-50%);
+      width:var(--beamW, 240px); height:var(--beamH, 260px);
+      pointer-events:none;
+    }
+    #holo-beam .hb-core, #holo-beam .hb-outer, #holo-beam .hb-rays, #holo-beam .hb-fan {
+      position:absolute; inset:0;
+      mix-blend-mode:screen;
+      /* 頂端漸淡 → 接進橢圓光暈，呈現立體錐狀 */
+      -webkit-mask-image:linear-gradient(to top, #000 68%, rgba(0,0,0,0.4) 90%, transparent 100%);
+              mask-image:linear-gradient(to top, #000 68%, rgba(0,0,0,0.4) 90%, transparent 100%);
+    }
+    /* 錐狀光束頂端：橢圓光暈＋橢圓線圈（透視感，與視窗環橢圓呼應） */
+    #holo-beam .hb-top {
+      position:absolute; left:46%; top:-5%;
+      width:108%; height:26%;
+      transform:translateX(-50%);
+      background:radial-gradient(ellipse 50% 50% at 50% 50%,
+        rgba(160,230,255,0.50), rgba(110,205,255,0.20) 55%, transparent 76%);
+      filter:blur(9px);
+      mix-blend-mode:screen;
+      animation:beamPulse 2.6s ease-in-out infinite;
+      pointer-events:none;
+    }
+    #holo-beam .hb-topring {
+      position:absolute; left:46%; top:-2%;
+      width:92%; height:20%;
+      transform:translateX(-50%);
+      border-radius:50%;
+      border:1.5px solid rgba(170,235,255,0.55);
+      box-shadow:0 0 14px rgba(120,215,255,0.45), inset 0 0 14px rgba(120,215,255,0.3);
+      filter:blur(1px);
+      mix-blend-mode:screen;
+      animation:beamPulse 2.6s ease-in-out infinite reverse;
+      pointer-events:none;
+    }
+    #holo-beam .hb-core {
+      clip-path:polygon(46% 100%, 28% 0%, 68% 0%);
+      background:linear-gradient(to top, rgba(140,235,255,0.75), rgba(120,220,255,0.18) 55%, rgba(120,220,255,0.02));
+      filter:blur(1.5px);
+      animation:beamPulse 2.6s ease-in-out infinite;
+    }
+    #holo-beam .hb-outer {
+      clip-path:polygon(44% 100%, 8% 0%, 92% 0%);
+      background:linear-gradient(to top, rgba(56,168,255,0.62), rgba(70,180,255,0.05));
+      filter:blur(12px);
+      animation:beamPulse 2.6s ease-in-out infinite reverse;
+    }
+    /* 放射狀淡藍寬光扇：柔和發散、反向緩轉 */
+    #holo-beam .hb-fan {
+      clip-path:polygon(46% 100%, 0% 0%, 100% 0%);
+      background:repeating-conic-gradient(from var(--rayA, 0deg) at 46% 106%,
+        rgba(95,190,255,0.00) 0deg 6deg,
+        rgba(95,190,255,0.42) 9deg 11deg,
+        rgba(95,190,255,0.00) 14deg 16deg);
+      filter:blur(7px);
+      animation:fanSpin 11s linear infinite reverse, beamPulse 2.6s ease-in-out infinite;
+    }
+    @keyframes fanSpin { from { --rayA:0deg; } to { --rayA:16deg; } }
+    /* 放射狀細光線：由球頂呈扇形放射，閃爍＋緩慢轉動 */
+    #holo-beam .hb-rays {
+      clip-path:polygon(46% 100%, 2% 0%, 98% 0%);
+      background:repeating-conic-gradient(from var(--rayA, 0deg) at 46% 106%,
+        rgba(195,248,255,0.00) 0deg 5.2deg,
+        rgba(195,248,255,0.85) 5.8deg 6.4deg,
+        rgba(195,248,255,0.00) 7.0deg 8.0deg);
+      filter:blur(0.4px);
+      animation:raysSpin 6s linear infinite, raysFlicker 2.3s steps(1) infinite;
+      opacity:0.95;
+    }
+    @property --rayA { syntax:'<angle>'; initial-value:0deg; inherits:false; }
+    @keyframes raysSpin { from { --rayA:0deg; } to { --rayA:8deg; } }
+    @keyframes raysFlicker {
+      0%,100% { opacity:0.8; } 11% { opacity:0.45; } 23% { opacity:0.85; }
+      36% { opacity:0.5; } 57% { opacity:0.9; } 73% { opacity:0.55; } 86% { opacity:0.95; }
+    }
+    @keyframes beamPulse { 0%,100% { opacity:0.85; } 50% { opacity:1; } }
+    #holo-glow {
+      position:absolute; bottom:-12px; left:0;
+      transform:translate(-50%, 50%);
+      width:110px; height:52px; border-radius:50%;
+      background:radial-gradient(ellipse at center,
+        rgba(190,250,255,0.95), rgba(110,210,255,0.5) 40%, rgba(110,210,255,0.0) 72%);
+      filter:blur(3px);
+      mix-blend-mode:screen;
+      animation:glowPulse 2.6s ease-in-out infinite;
+      pointer-events:none;
+    }
+    @keyframes glowPulse { 0%,100% { opacity:0.75; transform:translate(-50%,50%) scale(1); }
+      50% { opacity:1; transform:translate(-50%,50%) scale(1.15); } }
+    /* 3D 圓環容器 */
+    #ring-persp {
+      position:absolute; left:0;
+      bottom:var(--ringBottom, 210px);
+      transform:translateX(-50%);
+      width:var(--ringW, 760px); height:var(--ringH, 280px);
+      perspective:1200px; perspective-origin:50% 58%;
+      pointer-events:auto; cursor:grab;
+    }
+    #ring-persp.dragging { cursor:grabbing; }
+    #ring-stage {
+      position:absolute; inset:0;
+      transform-style:preserve-3d;
+    }
+    /* 弧形玻璃視窗：每片視窗由多條窄玻璃拼成圓柱曲面 */
+    .ring-strip {
+      position:absolute; left:50%; top:50%;
+      width:var(--stripW, 42px); height:var(--panelH, 176px);
+      margin-left:calc(var(--stripW, 42px) / -2);
+      margin-top:calc(var(--panelH, 176px) / -2);
+      background:linear-gradient(180deg, rgba(58,150,240,0.44), rgba(26,88,190,0.24));
+      backdrop-filter:blur(6px) saturate(1.3);
+      -webkit-backdrop-filter:blur(6px) saturate(1.3);
+      border-top:1.5px solid rgba(125,215,255,0.92);
+      border-bottom:1.5px solid rgba(125,215,255,0.92);
+      backface-visibility:visible;   /* 背面視窗隱約可見 */
+      pointer-events:auto;
+    }
+    .ring-strip.edge-l { border-left:1.5px solid rgba(125,215,255,0.92); border-radius:12px 0 0 12px; }
+    .ring-strip.edge-r { border-right:1.5px solid rgba(125,215,255,0.92); border-radius:0 12px 12px 0; }
+    .ring-strip.front {
+      border-color:rgba(200,245,255,1);
+      background:linear-gradient(180deg, rgba(72,165,250,0.52), rgba(34,105,210,0.30));
+    }
+    /* 視窗內容：浮在弧形玻璃正前方的平面文字層 */
+    .rp-content {
+      position:absolute; left:50%; top:50%;
+      width:var(--contentW, 230px); height:var(--panelH, 176px);
+      margin-left:calc(var(--contentW, 230px) / -2);
+      margin-top:calc(var(--panelH, 176px) / -2);
+      padding:16px 8px;
+      box-sizing:border-box;
+      color:#eaffff; user-select:none;
+      backface-visibility:hidden;    /* 轉到背面時文字不鏡射 */
+      pointer-events:auto;
+    }
+    .rp-title {
+      font-size:19px; font-weight:600; letter-spacing:3px;
+      text-shadow:0 0 14px rgba(130,225,255,0.95);
+      font-family:'Orbitron','Noto Sans TC',sans-serif;
+    }
+    .rp-line {
+      height:8px; margin-top:13px; border-radius:4px;
+      background:rgba(175,228,255,0.26);
+    }
+    .rp-btn {
+      margin-top:15px; width:92px; height:27px; border-radius:7px;
+      background:rgba(135,218,255,0.32);
+      border:1px solid rgba(165,232,255,0.75);
+      font-size:11px; letter-spacing:3px; color:#eaffff;
+      display:flex; align-items:center; justify-content:center;
+      font-family:'Noto Sans TC',sans-serif;
+    }
+    .rp-content.front .rp-title { text-shadow:0 0 20px rgba(170,240,255,1), 0 0 8px rgba(200,250,255,0.9); }
+    .ring-strip.flash, .rp-content.flash { animation:panelFlash 0.25s ease; }
+    @keyframes panelFlash { 50% { filter:brightness(2); } }
+    .ring-arrow {
+      position:absolute;
+      bottom:calc(var(--ringBottom, 210px) + var(--ringH, 280px) * 0.38);
+      width:42px; height:42px; border-radius:50%;
+      background:rgba(8,30,64,0.72);
+      border:1.5px solid rgba(120,215,255,0.8);
+      color:#9fe4ff; font-size:22px; line-height:1;
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; pointer-events:auto; z-index:5;
+      transition:background .15s, box-shadow .15s;
+      font-family:sans-serif;
+    }
+    .ring-arrow:hover { background:rgba(16,60,110,0.85); box-shadow:0 0 16px rgba(110,210,255,0.6); }
+    #ring-prev { left:calc(var(--ringW, 760px) / -2 - 14px); }
+    #ring-next { left:calc(var(--ringW, 760px) / 2 - 28px); }
+    /* ── 入場序列：ORO 定位前全部隱藏 → 光束閃爍點亮 → 橢圓圈 → 視窗展開 ── */
+    #holo-ring.pre-reveal #holo-beam, #holo-ring.pre-reveal #holo-glow,
+    #holo-ring.pre-reveal #ring-persp, #holo-ring.pre-reveal .ring-arrow,
+    #holo-ring.pre-reveal #ring-ellipse,
+    #holo-ring.stage-beam #ring-persp, #holo-ring.stage-beam .ring-arrow,
+    #holo-ring.no-arrows .ring-arrow { visibility:hidden; }
+    #holo-ring.beam-on #holo-beam, #holo-ring.beam-on #holo-glow {
+      animation:beamIgnite 0.95s steps(1) both;
+    }
+    @keyframes beamIgnite {
+      0% { opacity:0; } 8% { opacity:1; } 15% { opacity:0.08; } 24% { opacity:0.9; }
+      33% { opacity:0.15; } 45% { opacity:1; } 58% { opacity:0.3; }
+      70% { opacity:1; } 82% { opacity:0.6; } 100% { opacity:1; }
+    }
+    #ring-ellipse {
+      position:absolute; left:0;
+      bottom:calc(var(--ringBottom, 210px) + var(--ringH, 280px) * 0.5);
+      transform:translate(-50%, 50%) scale(0.1);
+      width:calc(var(--ringW, 760px) * 0.88);
+      height:calc(var(--ringH, 280px) * 0.40);
+      border-radius:50%;
+      border:1.5px solid rgba(150,230,255,0.95);
+      box-shadow:0 0 18px rgba(120,215,255,0.75), inset 0 0 18px rgba(120,215,255,0.35);
+      pointer-events:none; opacity:0;
+    }
+    #ring-ellipse.pop { animation:ellipsePop 0.5s cubic-bezier(0.2,1.4,0.4,1) forwards; }
+    @keyframes ellipsePop {
+      0% { opacity:0; transform:translate(-50%,50%) scale(0.1); }
+      60% { opacity:1; }
+      100% { opacity:1; transform:translate(-50%,50%) scale(1); }
+    }
+    #ring-ellipse.fade { animation:ellipseFade 0.7s ease forwards; }
+    @keyframes ellipseFade { from { opacity:1; } to { opacity:0; } }
+  </style>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-8H3PG9LZV1"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-8H3PG9LZV1');</script>
+</head>
+<body>
+
+<!-- ══ 1. 背景圖 ══ -->
+<div id="bg-img"></div>
+
+<!-- ══ 2. 水波紋 Canvas ══ -->
+<canvas id="ripple-canvas"></canvas>
+
+<!-- ══ 2.5 互動星空 Canvas ══ -->
+<canvas id="star-canvas"></canvas>
+
+<!-- ══ 2.7 M 門傳送門 Canvas（在水面/星空之上：門是實體，不被水波遮擋）══ -->
+<canvas id="portal-canvas"></canvas>
+
+<!-- ══ 3. ORO 佔位（GLB 載入前）══ -->
+<div id="oro-placeholder">
+  <img src="./site-assets/oro_front.png?v=2" alt="ORO"
+       style="height:40vh; display:block; filter:drop-shadow(0 0 24px rgba(0,180,255,0.5)) drop-shadow(0 0 8px rgba(120,80,255,0.4)); mix-blend-mode:multiply;">
+</div>
+
+<!-- ══ 4. Three.js canvas ══ -->
+<canvas id="three-canvas"></canvas>
+
+<div id="scanlines"></div>
+<div class="corner tl"></div><div class="corner tr"></div>
+<div class="corner bl"></div><div class="corner br"></div>
+
+<div id="hud">
+  <div id="logo-text">MOROW STUDIO &nbsp;·&nbsp; 莫羅工作室</div>
+  <div id="logo-line"></div>
+  <div id="status-bar">
+    <div class="s-item"><div class="s-dot"></div>AI ENGINE ONLINE</div>
+    <div class="s-item"><div class="s-dot d2"></div>VIDEO PIPELINE READY</div>
+    <div class="s-item"><div class="s-dot d3"></div>DISTRIBUTION ACTIVE</div>
+  </div>
+  <div id="click-hint">&#9654; &nbsp; 點擊 ORO 開始對話</div>
+</div>
+
+<div id="bubble">
+  <div class="bubble-head">
+    <div class="oro-avatar">
+      <img src="./site-assets/oro_front.png?v=2" alt="ORO">
+    </div>
+    <div>
+      <div class="bubble-name">ORO · AI 行銷官</div>
+      <div class="bubble-status">線上 · 隨時為您服務</div>
+    </div>
+    <button id="close-bubble">&#10005;</button>
+  </div>
+  <div class="bubble-msgs" id="bubble-msgs"></div>
+  <div id="voice-hint">🔊 點一下畫面任意處，聽 ORO 說話</div>
+  <div class="bubble-input">
+    <input id="chat-in" type="text" placeholder="輸入您的設備或需求..." autocomplete="off"/>
+    <button id="send-btn">&#10140;</button>
+  </div>
+</div>
+
+<div id="glb-progress">ORO 載入中...</div>
+
+<!-- ══ 全息環狀頁面選單（DOM CSS-3D）══ -->
+<div id="holo-ring">
+  <div id="holo-beam">
+    <div class="hb-outer"></div>
+    <div class="hb-fan"></div>
+    <div class="hb-core"></div>
+    <div class="hb-rays"></div>
+    <div class="hb-top"></div>
+    <div class="hb-topring"></div>
+  </div>
+  <div id="holo-glow"></div>
+  <div id="ring-ellipse"></div>
+  <div id="ring-persp">
+    <div id="ring-stage"></div>
+  </div>
+  <button id="ring-prev" class="ring-arrow">&#8249;</button>
+  <button id="ring-next" class="ring-arrow">&#8250;</button>
+</div>
+
+<!-- ══ 水波設定（由 calibrator.html 匯出的 water 區塊可直接貼上覆蓋）══ -->
+<script>
+window.WATER_CFG = {
+  // ═══ 2026-07-13 Eason 校準定版（calibrator 匯出烙定）═══
+  waterTop: 0.56,       // 水平線位置（視口比例：上=星空、下=水面）
+  perturb: 0.05,        // 折射強度
+  iters: 2,             // 波速（每幀傳播步數 1-4）
+  damping: 0.9885,      // 波持久度（越接近 1 越持久）
+  wake:  { radius: 12, strength: 0.015, spacing: 6 },      // ORO 划水痕跡
+  idle:  { intervalMs: 500, radius: 13, strength: 0.012 }, // 待機漣漪
+  mouse: { radius: 11, strength: 0.014, clickRadius: 30, clickStrength: 0.12 },
+  // 雙腳波源：offsets 為「相對腳底中心」的視口比例（x=寬度比、y=高度比，向下為正），
+  // 會隨 ORO 入場縮放比例同步縮放 → 跟隨 ORO 移動
+  dualFeet: { enabled: true, leftN: {x:-0.044, y:-0.0016}, rightN: {x:0.044, y:-0.0016} },
+  // M 門擋牆：實體不產生水波。座標為水面 UV（u=左→右 0~1，v=畫布底→地平線 0~1）
+  blocker: { enabled: true, u: 0.245, v: 1, rx: 0.13, ry: 0.07 },
+  // ORO 待機漂浮（世界單位振幅 / 速度）
+  oroFloat: { amp: 0.04, speed: 0.55 },
+  // 互動星空：hoverMode = both（星座連線＋變亮）| bubble（只變亮）| grab（只連線）| none
+  stars: { count: 230, brightness: 1.6, hoverMode: 'both', hoverDist: 160 }
+};
+
+// ═══ M 門傳送門設定（原閃電雲圖 + 雲霧擾動 + 偶發閃電）═══
+window.PORTAL_CFG = {
+  speed: 1.0,        // ★ 雲霧流動速度（1=標準，越大越快）
+  distort: 0.020,    // ★ 雲塵飄動強度（0=完全靜止，0.04=明顯扭動）
+  bolt: 1.4,         // ★ 雲內閃電亮度（0=關閉閃電）
+  boltFreq: 0.55,    // ★ 閃電頻率（0~1，越大越常閃）
+  brightness: 1.0,   // ★ 整體亮度倍率
+  // 以下由背景圖分析自動產生，不需手動調整
+  box: { x0: 0.1917, y0: 0.2562, x1: 0.3494, y1: 0.5813 }   // 門內區域（由「背景內框塗紅色」精準提取）
+};
+
+// ═══ 展示球 + 環狀頁面選單設定 ═══
+window.PAGE_RING_CFG = {
+  // ★ 頁面清單：title=視窗標題，url=點擊後前往的網址（空字串=尚未設定，點擊只閃一下）
+  pages: [
+    { title: '服務方案', url: '' },
+    { title: '作品集',   url: '' },
+    { title: 'AI 影片',  url: '' },
+    { title: '關於莫羅', url: '' },
+    { title: '聯絡我們', url: '' }
+  ],
+  position: { x: 1.62, y: -1.10, z: 1.9 }, // ★ 展示球位置（畫面右側，空間大、視窗清晰）
+  sphereRadius: 0.30,   // ★ 球體大小
+  ringTilt: 9,          // ★ 視窗環俯視傾角（度，0=平視，越大越像從上往下看）
+  panelScale: 1.0,      // ★ 視窗大小倍率（1=標準，1.2=加大 20%）
+  panelArc: 52,         // ★ 每片視窗的圓弧角度（度，越大弧度越彎、視窗越寬）
+  ringLift: 1.0,        // ★ 視窗環相對球的高度倍率（1=標準，越大離球越高）
+  ballRotDeg: -20       // ★ 球轉向（度，負=順時針；±90 附近是鏡射接縫，勿用）
+};
+
+// ═══ 校準同步：calibrator 按「🌐 同步到正式網站」會在資料夾產生 calibrator_config.json，
+// 這裡若讀到該檔就覆蓋上方全部預設值 → calibrator 調什麼，正式網站就同步什麼 ═══
+window.__calCfg = null;
+try {
+  var __xhr = new XMLHttpRequest();
+  __xhr.open('GET', './calibrator_config.json?t=' + Date.now(), false);  // 同步載入：需趕在引擎啟動前
+  __xhr.send(null);
+  if (__xhr.status === 200) {
+    var __c = JSON.parse(__xhr.responseText);
+    window.__calCfg = __c;
+    if (__c.water) { for (var __k in __c.water) window.WATER_CFG[__k] = __c.water[__k]; }
+    if (__c.pageRing) {
+      var __p = __c.pageRing, __R = window.PAGE_RING_CFG;
+      if (__p.position) __R.position = __p.position;
+      if (typeof __p.sphereRadius === 'number') __R.sphereRadius = __p.sphereRadius;
+      if (typeof __p.ringTilt === 'number') __R.ringTilt = __p.ringTilt;
+      if (typeof __p.panelScale === 'number') __R.panelScale = __p.panelScale;
+      if (typeof __p.panelArc === 'number') __R.panelArc = __p.panelArc;
+      if (typeof __p.ringLift === 'number') __R.ringLift = __p.ringLift;
+      if (typeof __p.ballRotDeg === 'number') __R.ballRotDeg = __p.ballRotDeg;
+    }
+    console.log('[Sync] ✓ calibrator_config.json 已套用'
+      + (__c.waterTrailPath ? '（' + __c.waterTrailPath.length + ' 路徑點）' : ''));
+  }
+} catch (e) { /* 無同步檔 → 使用內建烙定預設值 */ }
+</script>
+
+<!-- ══ 主題影片全息投影（右上天空）══ -->
+<div id="sky-video-halo"></div>
+<div id="sky-video"><video src="./site-assets/theme_creatorcloud.webm?v=2" muted loop playsinline preload="auto"></video></div>
+<div id="sky-video-refl"><video src="./site-assets/theme_creatorcloud.webm?v=2" muted loop playsinline preload="auto"></video></div>
+<script>
+// 倒影貼齊水平線（waterTop 可調時自動跟隨）
+(function () {
+  var wt = (window.WATER_CFG && typeof WATER_CFG.waterTop === 'number') ? WATER_CFG.waterTop : 0.56;
+  var r = document.getElementById('sky-video-refl');
+  if (r) r.style.top = (wt * 100) + 'vh';
+})();
+// 主題影片：展示光束開啟時才淡入＋開始播放（由 __ringReveal 呼叫）
+window.__skyVideoOn = function () {
+  ['sky-video', 'sky-video-halo', 'sky-video-refl'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.classList.add('on');
+  });
+  document.querySelectorAll('#sky-video video, #sky-video-refl video').forEach(function (v) {
+    try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {}
+  });
+};
+// 影片中心線對齊展示球中心（球體投影出影片的感覺）；高度不變
+(function () {
+  var ids = ['sky-video-halo', 'sky-video', 'sky-video-refl'];
+  function place() {
+    var a = window.__ringAnchor;
+    if (!a) return;
+    ids.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      var w = el.offsetWidth;
+      var left = Math.round(a.x - w / 2);
+      left = Math.max(8, Math.min(left, innerWidth - w - 8));  // 不超出畫面
+      el.style.left = left + 'px';
+      el.style.right = 'auto';
+    });
+  }
+  setInterval(place, 400);
+  window.addEventListener('resize', function () { setTimeout(place, 60); });
+})();
+</script>
+
+<!-- ══ 全息環狀頁面選單（原生 JS + CSS 3D Transform，無外部 3D 庫）══ -->
+<script>
+(function () {
+'use strict';
+
+var CFG   = window.PAGE_RING_CFG || {};
+var pages = CFG.pages || [];
+if (!pages.length) return;
+
+var root  = document.getElementById('holo-ring');
+var persp = document.getElementById('ring-persp');
+var stage = document.getElementById('ring-stage');
+if (!root || !persp || !stage) return;
+
+var N = pages.length;
+var STEP = 360 / N;                                   // 每片視窗間隔角度
+var PANEL_ARC = (typeof CFG.panelArc === 'number') ? CFG.panelArc : 52;   // 每片視窗弧度
+var TILT = (typeof CFG.ringTilt === 'number') ? CFG.ringTilt : 9;         // 俯視傾角
+var PSCALE = (typeof CFG.panelScale === 'number') ? CFG.panelScale : 1.0; // 視窗大小倍率
+var LIFT = (typeof CFG.ringLift === 'number') ? CFG.ringLift : 1.0;       // 視窗環相對球高度倍率
+var SLICES = 6;                                       // 每片視窗切成幾條弧形玻璃（效能考量）
+var groups = [];                                      // 每頁 = 多條玻璃 + 一層內容
+var openY = 0;                                        // 視窗展開比例（0=收合成線，1=全開）
+var revealed = false;                                 // 入場序列是否已跑過
+root.classList.add('pre-reveal', 'no-arrows');        // ORO 定位前：光束＋視窗環全部隱藏
+
+// ── 建立弧形視窗（窄玻璃條拼成圓柱曲面 + 平面內容層）──
+pages.forEach(function (pg, i) {
+  var g = { strips: [], content: null, all: [] };
+  for (var s = 0; s < SLICES; s++) {
+    var st = document.createElement('div');
+    st.className = 'ring-strip' + (s === 0 ? ' edge-l' : '') + (s === SLICES - 1 ? ' edge-r' : '');
+    st.dataset.i = i;
+    stage.appendChild(st);
+    g.strips.push(st);
+  }
+  var ct = document.createElement('div');
+  ct.className = 'rp-content';
+  ct.dataset.i = i;
+  ct.innerHTML =
+    '<div class="rp-title">' + (pg.title || ('頁面 ' + (i + 1))) + '</div>' +
+    '<div class="rp-line" style="width:78%"></div>' +
+    '<div class="rp-line" style="width:56%"></div>' +
+    '<div class="rp-btn">進入 &#8250;</div>';
+  stage.appendChild(ct);
+  g.content = ct;
+  g.all = g.strips.concat([ct]);
+  groups.push(g);
+});
+
+// ── 尺寸佈局：玻璃條沿同一個圓柱面排列（rotateY + translateZ）──
+var RADIUS = 300;
+function layout() {
+  var vw = innerWidth;
+  var panelW = Math.max(230, Math.min(310, vw * 0.16)) * PSCALE;  // 視窗寬（弦長）
+  var panelH = Math.round(panelW * 0.58);
+  var arcRad = PANEL_ARC * Math.PI / 180;
+  RADIUS = Math.round(panelW / (2 * Math.sin(arcRad / 2)));       // 由弧度反推環半徑
+  var stripArc = PANEL_ARC / SLICES;
+  var stripW = Math.ceil(2 * RADIUS * Math.sin(stripArc * Math.PI / 360) * 1.03); // 略重疊防縫
+  var ringBottom = Math.round(panelH * 0.86 * LIFT);   // 環底距球頂高度（ringLift 可調）
+  var beamH = Math.round(ringBottom + panelH * 0.30);  // 光束高度：略高於環底
+  root.style.setProperty('--ringBottom', ringBottom + 'px');
+  root.style.setProperty('--panelH', panelH + 'px');
+  root.style.setProperty('--stripW', stripW + 'px');
+  root.style.setProperty('--contentW', Math.round(panelW * 0.82) + 'px');
+  root.style.setProperty('--ringW', (RADIUS * 2 + 120) + 'px');
+  root.style.setProperty('--ringH', Math.round(panelH * 1.75) + 'px');
+  root.style.setProperty('--beamH', beamH + 'px');
+  root.style.setProperty('--beamW', Math.round(RADIUS * 0.9) + 'px');
+  groups.forEach(function (g, i) {
+    var base = i * STEP;
+    g.strips.forEach(function (st, s) {
+      var a = base - PANEL_ARC / 2 + (s + 0.5) * stripArc;
+      st.__base = 'rotateY(' + a + 'deg) translateZ(' + RADIUS + 'px)';
+    });
+    g.content.__base = 'rotateY(' + base + 'deg) translateZ(' + (RADIUS + 2) + 'px)';
+  });
+  applyOpen();
+  lastPainted = null;   // 佈局變更 → 強制重繪一次
+}
+// 視窗展開比例套用（scaleY：從橢圓線往上下展開）
+function applyOpen() {
+  groups.forEach(function (g) {
+    g.all.forEach(function (el) {
+      if (el.__base) el.style.transform = el.__base + ' scaleY(' + Math.max(0.001, openY) + ')';
+    });
+  });
+}
+layout();
+window.addEventListener('resize', layout);
+
+// ── 入場序列：光束閃爍點亮 → 橢圓線圈跳出 → 視窗由線圈往上下展開 ──
+window.__ringReveal = function (done) {
+  if (revealed) { if (done) done(); return; }
+  revealed = true;
+  root.classList.remove('pre-reveal');
+  root.classList.add('stage-beam', 'beam-on');        // 1) 光束閃爍點亮（視窗仍隱藏）
+  if (window.__skyVideoOn) window.__skyVideoOn();     //    主題影片同步淡入＋播放
+  setTimeout(function () {
+    root.classList.remove('beam-on');                 //    恢復光束原本的脈動動畫
+    var ell = document.getElementById('ring-ellipse');
+    if (ell) ell.classList.add('pop');                // 2) 橢圓線圈跳出
+    setTimeout(function () {
+      root.classList.remove('stage-beam');            // 3) 視窗由橢圓往上下展開
+      var t0 = performance.now();
+      (function grow() {
+        var p = Math.min(1, (performance.now() - t0) / 650);
+        openY = 1 - Math.pow(1 - p, 3);               // easeOutCubic
+        applyOpen();
+        if (p < 1) { requestAnimationFrame(grow); return; }
+        if (ell) { ell.classList.remove('pop'); ell.classList.add('fade'); }
+        root.classList.remove('no-arrows');           // 展開完成 → 顯示左右箭頭
+        if (done) done();                             // 4) → ORO 開講
+      })();
+    }, 620);
+  }, 1000);
+};
+// 保險絲：若入場流程異常（如 3D 載入失敗），25 秒後直接顯示
+setTimeout(function () {
+  if (!revealed) { revealed = true; openY = 1; applyOpen();
+    root.classList.remove('pre-reveal', 'no-arrows');
+    if (window.__skyVideoOn) window.__skyVideoOn(); }
+}, 25000);
+
+// ── 旋轉狀態 ──
+var angle = 0;          // 目前環的旋轉角
+var vel = 0;            // 慣性速度
+var dragging = false, lastX = 0, moved = 0;
+var snapTarget = null;  // 吸附目標角度（null = 自由滑行中）
+var lastPainted = null; // 上次繪製的角度（閒置時停止樣式重寫，省效能）
+
+// 最靠近正前方的面板 index
+function frontIndex() {
+  return ((Math.round(-angle / STEP) % N) + N) % N;
+}
+// 把目標角度換算成「離目前角度最近」的等效角（避免繞遠路）
+function nearest(target) {
+  var k = Math.round((angle - target) / 360);
+  return target + k * 360;
+}
+function snapToIndex(i) { snapTarget = nearest(-i * STEP); vel = 0; }
+
+// ── 滑鼠拖曳旋轉 ──
+persp.addEventListener('pointerdown', function (e) {
+  if (e.button !== 0) return;
+  dragging = true; lastX = e.clientX; moved = 0; snapTarget = null;
+  persp.classList.add('dragging');
+});
+document.addEventListener('pointermove', function (e) {
+  if (!dragging) return;
+  var dx = e.clientX - lastX;
+  lastX = e.clientX;
+  moved += Math.abs(dx);
+  angle += dx * 0.35;   // 拖曳靈敏度
+  vel = dx * 0.35;
+});
+document.addEventListener('pointerup', function (e) {
+  if (!dragging) return;
+  dragging = false;
+  persp.classList.remove('dragging');
+  if (moved < 6) {
+    // 視為點擊：點前方視窗 → 前往頁面；點側面視窗 → 轉到正面
+    var el = e.target && e.target.closest ? e.target.closest('.ring-strip, .rp-content') : null;
+    if (el) {
+      var i = +el.dataset.i;
+      if (i === frontIndex()) {
+        var url = pages[i].url;
+        if (url) { window.location.href = url; }
+        else {
+          groups[i].all.forEach(function (n) {
+            n.classList.remove('flash');
+            void n.offsetWidth;   // 重新觸發動畫
+            n.classList.add('flash');
+          });
+        }
+      } else {
+        snapToIndex(i);
+      }
+    }
+  }
+});
+
+// ── 左右箭頭 ──
+document.getElementById('ring-prev').addEventListener('click', function () {
+  snapToIndex((frontIndex() - 1 + N) % N);
+});
+document.getElementById('ring-next').addEventListener('click', function () {
+  snapToIndex((frontIndex() + 1) % N);
+});
+
+// ── 主迴圈：慣性減速 → 自動吸附置中；錨定在展示球上方 ──
+function tick() {
+  requestAnimationFrame(tick);
+  if (!dragging) {
+    if (snapTarget === null) {
+      angle += vel;
+      vel *= 0.94;                        // 慣性減速
+      if (Math.abs(vel) < 0.06) {
+        snapTarget = nearest(-frontIndex() * STEP);   // 停止 → 吸附最近面板
+      }
+    } else {
+      angle += (snapTarget - angle) * 0.12;           // 平滑吸附
+      if (Math.abs(snapTarget - angle) < 0.05) angle = snapTarget;
+    }
+  }
+  // 效能：角度沒變（閒置吸附完成後）就完全不重寫樣式，省掉毛玻璃重繪
+  if (angle !== lastPainted) {
+    lastPainted = angle;
+    // 環後退 RADIUS → 圓心落在螢幕平面；rotateX 負傾角 → 略帶俯視（後排視窗浮在上方）
+    stage.style.transform = 'translateZ(' + (-RADIUS) + 'px) rotateX(' + (-TILT) + 'deg) rotateY(' + angle + 'deg)';
+    var fi = frontIndex();
+    for (var i = 0; i < N; i++) {
+      var wa = ((i * STEP + angle) % 360 + 360) % 360;       // 視窗世界角（0=正前方）
+      var c = Math.cos(wa * Math.PI / 180);
+      var op = c >= 0 ? 1 : Math.max(0.38, 1 + c * 0.62);    // 背面視窗半透明、隱約可見
+      var isF = (i === fi);
+      groups[i].all.forEach(function (el) {
+        el.classList.toggle('front', isF);
+        el.style.opacity = op.toFixed(3);
+      });
+    }
+  }
+  // 錨點：Three.js 每幀發布展示球頂的螢幕座標；尚未就緒時用預設位置
+  var a = window.__ringAnchor;
+  if (a) { root.style.left = a.x + 'px'; root.style.top = a.y + 'px'; }
+  else   { root.style.left = (innerWidth * 0.79) + 'px'; root.style.top = (innerHeight * 0.83) + 'px'; }
+}
+tick();
+window.__ringDebug = function () { return { angle: angle, snapTarget: snapTarget, fi: frontIndex(), vel: vel }; };
+console.log('[Ring] ✓ 全息環狀選單就緒（' + N + ' 片）');
+})();
+</script>
+
+<!-- ══ M 門傳送門：原閃電雲圖 + 雲霧擾動 + 偶發閃電（GLSL）══ -->
+<script>
+(function () {
+'use strict';
+
+var cv = document.getElementById('portal-canvas');
+if (!cv) return;
+var PC = window.PORTAL_CFG || {};
+function nv(x, d) { return (typeof x === 'number' && isFinite(x)) ? x : d; }
+var BOX = PC.box || { x0: 0.1917, y0: 0.2562, x1: 0.3494, y1: 0.5813 };
+var IMG_W = 2848, IMG_H = 1600;
+
+var gl = null;
+try {
+  gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: false, antialias: false, depth: false, stencil: false });
+} catch (e) { gl = null; }
+if (!gl) { console.warn('[Portal] 無 WebGL，傳送門停用（保留靜態背景）'); return; }
+
+var VERT = 'attribute vec2 aPos; varying vec2 vUv; void main(){ vUv=aPos*0.5+0.5; gl_Position=vec4(aPos,0.0,1.0); }';
+
+// ── Fragment Shader：以原圖為底，只做「雲霧擾動」與「偶發閃電」──
+//   雲霧擾動：低頻 fbm 噪點產生小幅 UV 位移，原本的閃電雲圖緩慢流動扭動
+//   偶發閃電：不定時風暴窗（noise 閘門）× 細絲（ridged noise）× 快速閃爍
+var FRAG = [
+  'precision highp float;',
+  'uniform vec2  uRes;',
+  'uniform float uTime;',
+  'uniform sampler2D uMask;',   // 門內遮罩
+  'uniform sampler2D uBg;',     // 原始背景圖
+  'uniform vec4  uBox;',        // 門內區域在背景圖上的範圍 (x0,y0,x1,y1)
+  'uniform float uSpeed;',      // ★ 流動速度
+  'uniform float uDistort;',    // ★ 雲霧擾動強度
+  'uniform float uBolt;',       // ★ 閃電亮度
+  'uniform float uBoltFreq;',   // ★ 閃電頻率
+  'uniform float uBright;',     // ★ 整體亮度
+  'varying vec2 vUv;',
+  'float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }',
+  'float noise(vec2 p) {',
+  '  vec2 i = floor(p), f = fract(p);',
+  '  vec2 u = f * f * (3.0 - 2.0 * f);',
+  '  return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x),',
+  '             mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);',
+  '}',
+  'float fbm(vec2 p) {',
+  '  float v = 0.0, a = 0.5;',
+  '  for (int i = 0; i < 4; i++) { v += a * noise(p); p = p * 2.03 + vec2(17.0, 9.2); a *= 0.55; }',
+  '  return v;',
+  '}',
+  'void main() {',
+  '  float mask = texture2D(uMask, vUv).r;',
+  '  if (mask < 0.02) { gl_FragColor = vec4(0.0); return; }',
+  // 邊界因子：靠近門框的效果全部歸零 → 邊緣與原圖完美對齊、完全靜止
+  '  float edge = smoothstep(0.15, 0.75, mask);',
+  '  float t = uTime * uSpeed;',
+  '  float asp = uRes.x / uRes.y;',
+  '  vec2 pos = vec2(vUv.x * asp, vUv.y);',
+  // 雲塵飄動：位移場本身隨時間平移 → 持續緩慢流動（不是偶爾動一下）
+  '  vec2 flow = vec2(fbm(pos * 1.8 + vec2(t * 0.06, t * 0.02)),',
+  '                   fbm(pos * 1.8 + vec2(5.2 + t * 0.03, 9.1 + t * 0.05)));',
+  '  vec2 disp = (flow - 0.5) * uDistort * edge;',
+  '  vec2 bguv = vec2(mix(uBox.x, uBox.z, vUv.x), mix(uBox.w, uBox.y, vUv.y));',
+  '  vec2 dispBg = disp * vec2(uBox.z - uBox.x, uBox.w - uBox.y);',
+  '  vec3 col = texture2D(uBg, bguv + dispBg).rgb;',
+  // 雲塵亮度緩慢飄移
+  '  col *= 1.0 + (fbm(pos * 2.4 + vec2(-t * 0.08, t * 0.04)) - 0.5) * 0.16 * edge;',
+  // 雲層內閃電：3 組獨立節奏的柔光，隨機位置、快速衰減脈衝（不定時、局部）
+  '  float flash = 0.0;',
+  '  for (int k = 0; k < 3; k++) {',
+  '    float fk = float(k);',
+  '    float seg = t * (0.5 + fk * 0.13) + fk * 3.7;',
+  '    float cell = floor(seg);',
+  '    float rnd = hash(vec2(cell, fk * 7.31));',
+  '    float gate = step(1.0 - clamp(uBoltFreq, 0.0, 1.0) * 0.75, rnd);',
+  '    vec2 fpos = vec2((0.15 + 0.7 * hash(vec2(cell, fk + 1.7))) * asp,',
+  '                      0.20 + 0.6 * hash(vec2(cell, fk + 3.9)));',
+  '    float ph = fract(seg);',
+  '    float pulse = exp(-ph * 7.0) * (0.7 + 0.3 * hash(vec2(cell, fk + 9.4))) * gate;',
+  '    vec2 dv = pos - fpos;',
+  '    flash += pulse * exp(-dot(dv, dv) * 14.0);',
+  '  }',
+  '  col += vec3(0.75, 0.72, 1.0) * flash * uBolt * edge * (0.4 + 0.6 * flow.x);',
+  '  gl_FragColor = vec4(col * uBright, mask);',
+  '}'
+].join('\n');
+
+function compile(type, src) {
+  var s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.warn('[Portal] shader:', gl.getShaderInfoLog(s)); return null;
+  }
+  return s;
+}
+var vs = compile(gl.VERTEX_SHADER, VERT), fs = compile(gl.FRAGMENT_SHADER, FRAG);
+if (!vs || !fs) return;
+var prog = gl.createProgram();
+gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return;
+gl.useProgram(prog);
+var U = {};
+['uRes','uTime','uMask','uBg','uBox','uSpeed','uDistort','uBolt','uBoltFreq','uBright'].forEach(function (n) {
+  U[n] = gl.getUniformLocation(prog, n);
+});
+var quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+var loc = gl.getAttribLocation(prog, 'aPos');
+gl.enableVertexAttribArray(loc);
+gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+var DPR_CAP = 1.5;
+function resize() {
+  var W = innerWidth, H = innerHeight;
+  var sc = Math.max(W / IMG_W, H / IMG_H);
+  var offX = (W - IMG_W * sc) / 2, offY = (H - IMG_H * sc) / 2;
+  cv.style.left = (BOX.x0 * IMG_W * sc + offX) + 'px';
+  cv.style.top  = (BOX.y0 * IMG_H * sc + offY) + 'px';
+  var cw = (BOX.x1 - BOX.x0) * IMG_W * sc, ch = (BOX.y1 - BOX.y0) * IMG_H * sc;
+  cv.style.width = cw + 'px'; cv.style.height = ch + 'px';
+  var dpr = Math.min(devicePixelRatio || 1, DPR_CAP);
+  cv.width = Math.max(2, Math.round(cw * dpr));
+  cv.height = Math.max(2, Math.round(ch * dpr));
+  gl.viewport(0, 0, cv.width, cv.height);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── 紋理載入：遮罩（TEXTURE0）＋ 原始背景圖（TEXTURE1）──
+var maskReady = false, bgReady = false;
+function loadTex(unit, src, flipY, onload) {
+  var im = new Image();
+  im.onload = function () {
+    var tex = gl.createTexture();
+    gl.activeTexture(unit);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flipY);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, im);
+    onload();
+  };
+  im.onerror = function () { console.warn('[Portal] 紋理載入失敗:', src); };
+  im.src = src;
+}
+function checkReady() {
+  if (maskReady && bgReady) {
+    cv.classList.add('ready');
+    console.log('[Portal] ✓ M 門閃電雲就緒（原圖擾動＋偶發閃電）');
+  }
+}
+loadTex(gl.TEXTURE0, './site-assets/m_mask.png?v=4', true,  function () { maskReady = true; checkReady(); });
+loadTex(gl.TEXTURE1, './site-assets/bg.png?v=2',  false, function () { bgReady = true;  checkReady(); });
+
+// ── 主迴圈（requestAnimationFrame：非活躍分頁自動暫停）──
+function loop(now) {
+  requestAnimationFrame(loop);
+  if (!maskReady || !bgReady) return;
+  gl.uniform2f(U.uRes, cv.width, cv.height);
+  gl.uniform1f(U.uTime, now / 1000);
+  gl.uniform1i(U.uMask, 0);
+  gl.uniform1i(U.uBg, 1);
+  gl.uniform4f(U.uBox, BOX.x0, BOX.y0, BOX.x1, BOX.y1);
+  gl.uniform1f(U.uSpeed,    nv(PC.speed, 1.0));
+  gl.uniform1f(U.uDistort,  nv(PC.distort, 0.020));
+  gl.uniform1f(U.uBolt,     nv(PC.bolt, 1.2));
+  gl.uniform1f(U.uBoltFreq, nv(PC.boltFreq, 0.5));
+  gl.uniform1f(U.uBright,   nv(PC.brightness, 1.0));
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+
+<!-- ══ 互動星空（particles.js NASA 風格，原生 Canvas 2D 實作，只在水平線以上）══ -->
+<script>
+(function () {
+'use strict';
+
+var cv = document.getElementById('star-canvas');
+if (!cv) return;
+var ctx = cv.getContext('2d');
+var TOPF = (window.WATER_CFG && typeof WATER_CFG.waterTop === 'number') ? WATER_CFG.waterTop : 0.48;
+cv.style.height = (TOPF * 100) + '%';
+
+// 可調參數由 WATER_CFG.stars 讀取（calibrator 匯出 JSON 可覆蓋）
+var SC = (window.WATER_CFG && WATER_CFG.stars) || {};
+function nv(x, d) { return (typeof x === 'number' && isFinite(x)) ? x : d; }
+var CFG = {
+  count:      Math.round(nv(SC.count, 160)),   // 數量密度
+  brightness: nv(SC.brightness, 1.0),          // 亮度倍率
+  hoverMode:  SC.hoverMode || 'both',          // both | bubble | grab | none
+  hoverDist:  nv(SC.hoverDist, 160),           // 互動範圍
+  // 以下為固定值
+  speed: 0.35,
+  sizeMin: 0.4, sizeMax: 2.4,
+  hoverScale: 2.2,
+  clickDist: 220,
+  clickPush: 4.0
+};
+
+var W = 1, H = 1, dpr = 1, stars = [];
+function resize() {
+  dpr = Math.min(devicePixelRatio || 1, 1.5);
+  W = innerWidth;
+  H = Math.max(1, Math.round(innerHeight * TOPF));
+  cv.width  = Math.round(W * dpr);
+  cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+function mkStar() {
+  var big = Math.random() < 0.12;
+  return {
+    x: Math.random() * W, y: Math.random() * H,
+    r: CFG.sizeMin + Math.random() * (CFG.sizeMax - CFG.sizeMin) + (big ? 0.8 : 0),
+    a: 0.25 + Math.random() * 0.75,       // 基礎亮度
+    ph: Math.random() * Math.PI * 2,      // 閃爍相位
+    tw: 0.005 + Math.random() * 0.02,     // 閃爍速度
+    vx: (Math.random() - 0.5) * CFG.speed,
+    vy: (Math.random() - 0.5) * CFG.speed,
+    px: 0, py: 0,                          // 點擊推力速度
+    flare: 0,                              // 點擊閃亮
+    blue: Math.random() < 0.18             // 少數星星帶青色
+  };
+}
+for (var i = 0; i < CFG.count; i++) stars.push(mkStar());
+
+// 滑鼠位置（只在星空區有效）
+var mx = -1e4, my = -1e4;
+document.addEventListener('mousemove', function (e) {
+  if (e.clientY < innerHeight * TOPF) { mx = e.clientX; my = e.clientY; }
+  else { mx = -1e4; my = -1e4; }
+});
+// 點擊星空：附近星星被推開 + 閃亮
+document.addEventListener('pointerdown', function (e) {
+  if (e.target && e.target.closest && e.target.closest('#bubble')) return;
+  if (e.clientY >= innerHeight * TOPF) return;
+  var cx = e.clientX, cy = e.clientY;
+  for (var i = 0; i < stars.length; i++) {
+    var s = stars[i];
+    var dx = s.x - cx, dy = s.y - cy;
+    var d = Math.hypot(dx, dy);
+    if (d < CFG.clickDist) {
+      var f = 1 - d / CFG.clickDist;
+      var inv = d > 0.5 ? 1 / d : 1;
+      s.px += dx * inv * f * CFG.clickPush;
+      s.py += dy * inv * f * CFG.clickPush;
+      s.flare = Math.min(1, s.flare + f);
+    }
+  }
+});
+
+function loop() {
+  requestAnimationFrame(loop);
+  ctx.clearRect(0, 0, W, H);
+  var doGrab   = (CFG.hoverMode === 'both' || CFG.hoverMode === 'grab');
+  var doBubble = (CFG.hoverMode === 'both' || CFG.hoverMode === 'bubble');
+
+  // 星座連線：游標與範圍內星星拉出細青線（呼應 M 星座主題）
+  if (doGrab && mx > -9000) {
+    for (var g = 0; g < stars.length; g++) {
+      var sg = stars[g];
+      var gdx = sg.x - mx, gdy = sg.y - my;
+      var gd = Math.sqrt(gdx * gdx + gdy * gdy);
+      if (gd < CFG.hoverDist) {
+        var la = Math.min(0.55, (1 - gd / CFG.hoverDist) * 0.42 * CFG.brightness);
+        ctx.strokeStyle = 'rgba(0,242,254,' + la.toFixed(3) + ')';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(sg.x, sg.y); ctx.lineTo(mx, my); ctx.stroke();
+      }
+    }
+  }
+
+  for (var i = 0; i < stars.length; i++) {
+    var s = stars[i];
+    s.x += s.vx + s.px; s.y += s.vy + s.py;
+    s.px *= 0.92; s.py *= 0.92;   // 推力衰減 → 回到自然漂移
+    s.flare *= 0.955;
+    s.ph += s.tw;
+    // 出界環繞
+    if (s.x < -4) s.x = W + 4; else if (s.x > W + 4) s.x = -4;
+    if (s.y < -4) s.y = H + 4; else if (s.y > H + 4) s.y = -4;
+
+    var alpha = s.a * (0.55 + 0.45 * Math.sin(s.ph)) * CFG.brightness;  // 閃爍 × 亮度
+    var r = s.r;
+    // 滑鼠靠近：變亮 + 放大
+    if (doBubble) {
+      var dx = s.x - mx, dy = s.y - my;
+      var d2 = dx * dx + dy * dy;
+      if (d2 < CFG.hoverDist * CFG.hoverDist) {
+        var t = 1 - Math.sqrt(d2) / CFG.hoverDist;
+        r *= 1 + (CFG.hoverScale - 1) * t;
+        alpha = alpha + t * 0.85;
+      }
+    }
+    // 點擊閃亮
+    if (s.flare > 0.01) { alpha = alpha + s.flare; r *= 1 + s.flare * 0.9; }
+    alpha = Math.min(1, alpha);
+
+    ctx.beginPath();
+    ctx.fillStyle = (s.blue ? 'rgba(150,222,255,' : 'rgba(255,255,255,') + alpha.toFixed(3) + ')';
+    ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    // 大星光暈
+    if (r > 2.2 && alpha > 0.5) {
+      ctx.beginPath();
+      ctx.fillStyle = (s.blue ? 'rgba(150,222,255,' : 'rgba(255,255,255,') + (alpha * 0.12).toFixed(3) + ')';
+      ctx.arc(s.x, s.y, r * 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+requestAnimationFrame(loop);
+console.log('[Stars] ✓ 互動星空就緒（' + CFG.count + ' 顆）');
+})();
+</script>
+
+<!-- ══ WebGL 水面漣漪引擎（jquery.ripples 同款演算法：高度場模擬 + 背景折射）══ -->
+<script>
+(function () {
+'use strict';
+
+// ─────────────────────────────────────────────────────────────────────────
+// 原理（同 https://github.com/sirxemic/jquery.ripples）：
+//   1. 浮點紋理存高度場（r=高度, g=速度），每幀用波動方程 ping-pong 傳播
+//   2. 渲染時取高度場梯度 → 對背景圖 UV 做折射偏移 + 鏡面反光
+//   3. 「水滴」= 往高度場加一個 cos 形狀的凸起
+// 本實作差異：
+//   • 不需 jQuery，原生 WebGL
+//   • 只套用在海面區域（視口下 52%），背景取樣對齊 CSS cover 定位
+//   • 靠近地平線折射/反光淡出（透視 + 避免與上方靜態背景接縫）
+//   • 波源：ORO 腳下軌跡（滑水痕）、滑鼠移動、點擊
+// ─────────────────────────────────────────────────────────────────────────
+
+var canvas    = document.getElementById('ripple-canvas');
+var BG_SRC    = './site-assets/bg.png?v=2';
+var SIM_W     = 768;      // 模擬解析度（寬，texel）
+var DPR_CAP   = 1.5;
+
+// ── 讀取 WATER_CFG（見上方設定區塊；缺欄位時用預設值）──
+var C      = window.WATER_CFG || {};
+var Cwake  = C.wake     || {};
+var Cidle  = C.idle     || {};
+var Cmouse = C.mouse    || {};
+var Cdual  = C.dualFeet || {};
+var Cblk   = C.blocker  || {};
+function nv(x, d) { return (typeof x === 'number' && isFinite(x)) ? x : d; }
+
+var WATER_TOP = nv(C.waterTop, 0.48);   // 水平線位置（可由 calibrator 校準）
+canvas.style.height = ((1 - WATER_TOP) * 100) + '%';
+
+var gl = null;
+try {
+  gl = canvas.getContext('webgl', { alpha:false, antialias:false, depth:false, stencil:false })
+    || canvas.getContext('experimental-webgl', { alpha:false });
+} catch (e) { gl = null; }
+
+// ══════════════════ 共用：波源座標工具 ══════════════════
+// 水面 UV：u 0→1 = 左→右；v 0→1 = 畫布底→地平線
+function pointerToWater(clientX, clientY) {
+  var topPx = innerHeight * WATER_TOP;
+  if (clientY < topPx || clientY > innerHeight) return null;
+  return {
+    u: clientX / innerWidth,
+    v: (innerHeight - clientY) / (innerHeight * (1 - WATER_TOP))
+  };
+}
+// 透視縮放：越近（畫布底）漣漪越大
+function persp(v) { return 0.35 + 0.65 * (1 - v); }
+
+// ORO 腳底（視口座標 0~1，由 Three.js 每幀更新）→ 水面 UV
+function oroFeetWater() {
+  var fx = (window.oroScreenX != null) ? window.oroScreenX : 0.22;
+  var fy = (window.oroScreenY != null) ? window.oroScreenY : 0.545;
+  if (fy <= WATER_TOP + 0.002 || fy > 1.02) return null;
+  return { u: fx, v: Math.max(0, (1 - fy) / (1 - WATER_TOP)) };
+}
+
+// ══════════════════ WebGL 主路徑 ══════════════════
+function initWebGL() {
+  var VERT = [
+    'attribute vec2 aPos;',
+    'varying vec2 vUv;',
+    'void main() {',
+    '  vUv = aPos * 0.5 + 0.5;',
+    '  gl_Position = vec4(aPos, 0.0, 1.0);',
+    '}'
+  ].join('\n');
+
+  var FRAG_DROP = [
+    'precision highp float;',
+    'const float PI = 3.141592653589793;',
+    'uniform sampler2D uTex;',
+    'uniform vec2  uCenter;',   // 水面 UV
+    'uniform vec2  uTexSize;',  // 模擬紋理尺寸（texel）
+    'uniform float uRadius;',   // 半徑（texel）
+    'uniform float uStrength;',
+    'varying vec2 vUv;',
+    'void main() {',
+    '  vec4 info = texture2D(uTex, vUv);',
+    '  float d = length((uCenter - vUv) * uTexSize);',
+    '  float drop = max(0.0, 1.0 - d / uRadius);',
+    '  drop = 0.5 - cos(drop * PI) * 0.5;',
+    '  info.r += drop * uStrength;',
+    '  gl_FragColor = info;',
+    '}'
+  ].join('\n');
+
+  var FRAG_UPDATE = [
+    'precision highp float;',
+    'uniform sampler2D uTex;',
+    'uniform vec2  uDelta;',
+    'uniform float uDamping;',
+    'uniform vec4  uBlocker;',  // M 擋牆橢圓 (u, v, rx, ry)，rx<=0 表示停用
+    'varying vec2 vUv;',
+    'void main() {',
+    '  vec4 info = texture2D(uTex, vUv);',
+    '  vec2 dx = vec2(uDelta.x, 0.0);',
+    '  vec2 dy = vec2(0.0, uDelta.y);',
+    '  float average = (',
+    '    texture2D(uTex, vUv - dx).r +',
+    '    texture2D(uTex, vUv - dy).r +',
+    '    texture2D(uTex, vUv + dx).r +',
+    '    texture2D(uTex, vUv + dy).r',
+    '  ) * 0.25;',
+    '  info.g += (average - info.r) * 2.0;',
+    // 地平線消波帶：頂端 18% 加速衰減，避免波撞到模擬邊界反彈成亮帶
+    '  float horizonKill = smoothstep(1.0, 0.82, vUv.y);',
+    '  info.g *= uDamping * mix(0.82, 1.0, horizonKill);',
+    '  info.r += info.g;',
+    '  info.r *= mix(0.96, 1.0, horizonKill);',
+    // M 門擋牆：實體物件內波高/波速強制歸零 → 波被牆擋住繞行，不會穿過
+    '  if (uBlocker.z > 0.0) {',
+    '    vec2 bp = (vUv - uBlocker.xy) / uBlocker.zw;',
+    '    float wall = 1.0 - smoothstep(0.9, 1.15, dot(bp, bp));',
+    '    info.r *= 1.0 - wall;',
+    '    info.g *= 1.0 - wall;',
+    '  }',
+    '  gl_FragColor = info;',
+    '}'
+  ].join('\n');
+
+  var FRAG_RENDER = [
+    'precision highp float;',
+    'uniform sampler2D uWater;',
+    'uniform sampler2D uBg;',
+    'uniform vec2  uDelta;',
+    'uniform float uPerturb;',
+    'uniform vec2  uBgScale;',
+    'uniform vec2  uBgOff;',
+    'varying vec2 vUv;',
+    'void main() {',
+    '  float h  = texture2D(uWater, vUv).r;',
+    '  float hx = texture2D(uWater, vec2(vUv.x + uDelta.x, vUv.y)).r;',
+    '  float hy = texture2D(uWater, vec2(vUv.x, vUv.y + uDelta.y)).r;',
+    '  vec3 dxv = vec3(uDelta.x, hx - h, 0.0);',
+    '  vec3 dyv = vec3(0.0, hy - h, uDelta.y);',
+    '  vec2 offset = -normalize(cross(dyv, dxv)).xz;',
+    // 地平線淡出（透視 + 接縫保護）：depth 0=地平線, 1=畫布底
+    '  float depth = 1.0 - vUv.y;',
+    '  float fade  = smoothstep(0.0, 0.12, depth) * mix(0.45, 1.0, depth);',
+    '  vec2 bgUv = uBgOff + vUv * uBgScale + offset * uPerturb * fade;',
+    '  vec3 col  = texture2D(uBg, bgUv).rgb;',
+    '  float spec = pow(max(0.0, dot(offset, normalize(vec2(-0.6, 1.0)))), 4.0) * fade;',
+    '  col += spec * vec3(0.55, 0.85, 1.0) * 0.9;',
+    '  gl_FragColor = vec4(col, 1.0);',
+    '}'
+  ].join('\n');
+
+  function compile(type, src) {
+    var s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.warn('[Ripple] shader error:', gl.getShaderInfoLog(s));
+      return null;
+    }
+    return s;
+  }
+  function program(fsSrc) {
+    var vs = compile(gl.VERTEX_SHADER, VERT);
+    var fs = compile(gl.FRAGMENT_SHADER, fsSrc);
+    if (!vs || !fs) return null;
+    var p = gl.createProgram();
+    gl.attachShader(p, vs); gl.attachShader(p, fs); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return null;
+    var u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (var i = 0; i < n; i++) {
+      var info = gl.getActiveUniform(p, i);
+      u[info.name] = gl.getUniformLocation(p, info.name);
+    }
+    return { p: p, u: u };
+  }
+
+  // ── 浮點紋理格式偵測（同 jquery.ripples）──
+  var extF   = gl.getExtension('OES_texture_float');
+  var extHF  = gl.getExtension('OES_texture_half_float');
+  var extFL  = gl.getExtension('OES_texture_float_linear');
+  var extHFL = gl.getExtension('OES_texture_half_float_linear');
+  var configs = [];
+  if (extHF) configs.push({ type: extHF.HALF_FLOAT_OES, linear: !!extHFL });
+  if (extF)  configs.push({ type: gl.FLOAT,             linear: !!extFL  });
+
+  function renderable(type) {
+    var t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 4, 4, 0, gl.RGBA, type, null);
+    var fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    var ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(fb); gl.deleteTexture(t);
+    return ok;
+  }
+
+  var cfg = null;
+  for (var ci = 0; ci < configs.length; ci++) {
+    if (renderable(configs[ci].type)) { cfg = configs[ci]; break; }
+  }
+  if (!cfg) { console.warn('[Ripple] 無可渲染浮點紋理，退回 2D 漣漪'); return false; }
+
+  var progDrop   = program(FRAG_DROP);
+  var progUpdate = program(FRAG_UPDATE);
+  var progRender = program(FRAG_RENDER);
+  if (!progDrop || !progUpdate || !progRender) return false;
+
+  // ── 全螢幕四邊形 ──
+  var quad = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  function drawQuad(prog) {
+    var loc = gl.getAttribLocation(prog.p, 'aPos');
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  }
+
+  // ── 模擬用 ping-pong 紋理 ──
+  var simW = SIM_W, simH = 256, texA = null, texB = null, fbA = null, fbB = null;
+  var cssW = 1, cssH = 1;
+
+  function makeSimTex(w, h) {
+    var t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    var f = cfg.linear ? gl.LINEAR : gl.NEAREST;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, f);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, cfg.type, null);
+    var fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { t: t, fb: fb };
+  }
+
+  function allocSim() {
+    simW = SIM_W;
+    simH = Math.max(96, Math.round(SIM_W * cssH / Math.max(1, cssW)));
+    if (texA) { gl.deleteTexture(texA.t); gl.deleteFramebuffer(texA.fb); }
+    if (texB) { gl.deleteTexture(texB.t); gl.deleteFramebuffer(texB.fb); }
+    texA = makeSimTex(simW, simH);
+    texB = makeSimTex(simW, simH);
+  }
+
+  // ── 背景圖紋理 + CSS cover 對齊 ──
+  var bgTex = null, bgReady = false, imgW = 1, imgH = 1;
+  var bgScaleU = [1, 1], bgOffU = [0, 0];
+
+  function computeBgTransform() {
+    var W = innerWidth, H = innerHeight;
+    var sc    = Math.max(W / imgW, H / imgH);
+    var dispW = imgW * sc, dispH = imgH * sc;
+    var offX  = (W - dispW) / 2, offY = (H - dispH) / 2;
+    // 水面 UV (u,v) → 背景圖 UV（v=0 在畫布底 = 視口底）
+    bgScaleU = [ W / dispW, -(1 - WATER_TOP) * H / dispH ];
+    bgOffU   = [ -offX / dispW, (H - offY) / dispH ];
+  }
+
+  function resize() {
+    var dpr = Math.min(devicePixelRatio || 1, DPR_CAP);
+    cssW = innerWidth;
+    cssH = Math.round(innerHeight * (1 - WATER_TOP));
+    canvas.width  = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    allocSim();
+    computeBgTransform();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  var img = new Image();
+  img.onload = function () {
+    imgW = img.naturalWidth; imgH = img.naturalHeight;
+    bgTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, bgTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+    computeBgTransform();
+    bgReady = true;
+    canvas.classList.add('ready');
+    console.log('[Ripple] ✓ WebGL 水面就緒 (' + simW + '×' + simH +
+      ', ' + (cfg.type === gl.FLOAT ? 'float' : 'half-float') +
+      (cfg.linear ? '+linear' : '') + ')');
+  };
+  img.onerror = function () { console.warn('[Ripple] 背景圖載入失敗'); };
+  img.src = BG_SRC;
+
+  // ── 水滴投放 ──
+  function dropAt(u, v, radiusPx, strength) {
+    if (!texA) return;
+    // 擋牆內不投水滴（M 是實體）
+    if (Cblk.enabled !== false) {
+      var bdx = (u - nv(Cblk.u, 0.245)) / Math.max(0.001, nv(Cblk.rx, 0.13));
+      var bdy = (v - nv(Cblk.v, 0.875)) / Math.max(0.001, nv(Cblk.ry, 0.07));
+      if (bdx * bdx + bdy * bdy < 1.0) return;
+    }
+    var radiusTex = Math.max(1.5, radiusPx * (simW / Math.max(1, cssW)));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, texB.fb);
+    gl.viewport(0, 0, simW, simH);
+    gl.useProgram(progDrop.p);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texA.t);
+    gl.uniform1i(progDrop.u.uTex, 0);
+    gl.uniform2f(progDrop.u.uCenter, u, v);
+    gl.uniform2f(progDrop.u.uTexSize, simW, simH);
+    gl.uniform1f(progDrop.u.uRadius, radiusTex);
+    gl.uniform1f(progDrop.u.uStrength, strength);
+    drawQuad(progDrop);
+    var tmp = texA; texA = texB; texB = tmp;
+  }
+
+  function updateStep() {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, texB.fb);
+    gl.viewport(0, 0, simW, simH);
+    gl.useProgram(progUpdate.p);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texA.t);
+    gl.uniform1i(progUpdate.u.uTex, 0);
+    gl.uniform2f(progUpdate.u.uDelta, 1 / simW, 1 / simH);
+    gl.uniform1f(progUpdate.u.uDamping, nv(C.damping, 0.9955));
+    if (Cblk.enabled !== false) {
+      gl.uniform4f(progUpdate.u.uBlocker,
+        nv(Cblk.u, 0.245), nv(Cblk.v, 0.875),
+        Math.max(0.001, nv(Cblk.rx, 0.13)), Math.max(0.001, nv(Cblk.ry, 0.07)));
+    } else {
+      gl.uniform4f(progUpdate.u.uBlocker, 0, 0, -1, 1);
+    }
+    drawQuad(progUpdate);
+    var tmp = texA; texA = texB; texB = tmp;
+  }
+
+  function renderFrame() {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.useProgram(progRender.p);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texA.t);
+    gl.uniform1i(progRender.u.uWater, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, bgTex);
+    gl.uniform1i(progRender.u.uBg, 1);
+    gl.uniform2f(progRender.u.uDelta, 1 / simW, 1 / simH);
+    gl.uniform1f(progRender.u.uPerturb, nv(C.perturb, 0.05));
+    gl.uniform2f(progRender.u.uBgScale, bgScaleU[0], bgScaleU[1]);
+    gl.uniform2f(progRender.u.uBgOff, bgOffU[0], bgOffU[1]);
+    drawQuad(progRender);
+  }
+
+  // ── 波源 1：滑鼠 ──
+  var lastMx = null, lastMy = null;
+  window.addEventListener('pointermove', function (e) {
+    if (e.target && e.target.closest && e.target.closest('#bubble')) return;
+    var w = pointerToWater(e.clientX, e.clientY);
+    if (!w) { lastMx = null; return; }
+    if (lastMx != null) {
+      var d = Math.hypot(e.clientX - lastMx, e.clientY - lastMy);
+      if (d < 5) return;
+      var mStr = nv(Cmouse.strength, 0.016);
+      var s = Math.min(mStr, mStr * 0.375 + d * 0.0004);
+      dropAt(w.u, w.v, nv(Cmouse.radius, 14) * persp(w.v), s * persp(w.v));
+    }
+    lastMx = e.clientX; lastMy = e.clientY;
+  });
+  window.addEventListener('pointerdown', function (e) {
+    if (e.target && e.target.closest && e.target.closest('#bubble')) return;
+    var w = pointerToWater(e.clientX, e.clientY);
+    if (!w) return;
+    dropAt(w.u, w.v,
+      nv(Cmouse.clickRadius, 30) * persp(w.v),
+      nv(Cmouse.clickStrength, 0.12) * persp(w.v));
+  });
+
+  // ── 波源 2：ORO 划水軌跡 + 待機漣漪（單點或雙腳）──
+  // 雙腳波源：offsets（視口比例）相對腳底中心，隨 ORO 縮放比例縮放 → 永遠跟著 ORO
+  function feetSources() {
+    var f = oroFeetWater();
+    if (!f) return null;
+    if (!Cdual.enabled) return [f];
+    var ratio = (typeof window.oroScreenScale === 'number') ? window.oroScreenScale : 1;
+    var offs = [Cdual.leftN || {x:-0.02, y:0.004}, Cdual.rightN || {x:0.02, y:0.004}];
+    return offs.map(function (o) {
+      return {
+        u: f.u + nv(o.x, 0) * ratio,
+        // o.y 為視口高度比（向下為正）→ 水面 v 向上為正
+        v: f.v - (nv(o.y, 0) * ratio) / (1 - WATER_TOP)
+      };
+    });
+  }
+  var lastFeet = null, lastIdle = 0;
+  function oroWake(now) {
+    var srcs = feetSources();
+    if (!srcs) { lastFeet = null; return; }
+    var surge = window.oroEnteringProgress || 0;
+    if (lastFeet && lastFeet.length === srcs.length) {
+      var moved = false;
+      var spacing = Math.max(3, nv(Cwake.spacing, 8));
+      for (var k = 0; k < srcs.length; k++) {
+        var dxPx = (srcs[k].u - lastFeet[k].u) * cssW;
+        var dyPx = (srcs[k].v - lastFeet[k].v) * cssH;
+        var dist = Math.hypot(dxPx, dyPx);
+        if (dist > 3) {
+          moved = true;
+          // 移動中：沿線每 spacing px 投一滴 → 連續滑水痕
+          var steps = Math.min(12, Math.max(1, Math.floor(dist / spacing)));
+          for (var i = 1; i <= steps; i++) {
+            var t  = i / steps;
+            var iu = lastFeet[k].u + (srcs[k].u - lastFeet[k].u) * t;
+            var iv = lastFeet[k].v + (srcs[k].v - lastFeet[k].v) * t;
+            var pp = persp(iv);
+            // 與 calibrator 完全一致：不再依入場進度加料（所見即所得）
+            dropAt(iu, iv,
+              nv(Cwake.radius, 16) * pp,
+              nv(Cwake.strength, 0.02) * pp);
+          }
+        }
+      }
+      if (moved) {
+        lastIdle = now;
+      } else if (now - lastIdle > nv(Cidle.intervalMs, 900)) {
+        // 待機：漂浮時的輕漣漪（每個波源各一圈）
+        for (var j = 0; j < srcs.length; j++) {
+          var p0 = persp(srcs[j].v);
+          dropAt(srcs[j].u, srcs[j].v,
+            nv(Cidle.radius, 13) * p0,
+            nv(Cidle.strength, 0.016) * p0);
+        }
+        lastIdle = now;
+      }
+    }
+    lastFeet = srcs;
+  }
+
+  // ── 主迴圈 ──
+  function loop(now) {
+    requestAnimationFrame(loop);
+    if (!bgReady || !texA) return;
+    oroWake(now);
+    var iters = Math.max(1, Math.min(4, Math.round(nv(C.iters, 2))));
+    for (var i = 0; i < iters; i++) updateStep();
+    renderFrame();
+  }
+  requestAnimationFrame(loop);
+  return true;
+}
+
+// ══════════════════ 降級路徑：Canvas 2D 橢圓漣漪 ══════════════════
+function initFallback2D() {
+  var ctx = canvas.getContext('2d');
+  var W, H;
+  function resize() {
+    W = canvas.width  = innerWidth;
+    H = canvas.height = Math.round(innerHeight * (1 - WATER_TOP));
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  canvas.classList.add('ready');
+
+  var ripples = [], LIFE = 3000, lastSpawn = -9999;
+  window.addEventListener('pointerdown', function (e) {
+    var w = pointerToWater(e.clientX, e.clientY);
+    if (w) ripples.push({ born: performance.now(), u: w.u, v: w.v, surge: 0.4 });
+  });
+  function loop(now) {
+    ctx.clearRect(0, 0, W, H);
+    var f = oroFeetWater() || { u: 0.22, v: 0.88 };
+    var surge = window.oroEnteringProgress || 0;
+    if (now - lastSpawn > (surge > 0.05 ? 280 : 700)) {
+      ripples.push({ born: now, u: f.u, v: f.v, surge: surge });
+      lastSpawn = now;
+    }
+    for (var i = ripples.length - 1; i >= 0; i--) {
+      var r = ripples[i], p = (now - r.born) / LIFE;
+      if (p >= 1) { ripples.splice(i, 1); continue; }
+      var rx = p * W * 0.30 * persp(r.v), ry = rx * 0.20;
+      ctx.save();
+      ctx.globalAlpha = (1 - p) * (1 - p) * (0.5 + r.surge * 0.35);
+      ctx.strokeStyle = 'rgba(150,220,255,1)';
+      ctx.lineWidth = 1.5 + (1 - p) * 2.5;
+      ctx.beginPath();
+      ctx.ellipse(r.u * W, (1 - r.v) * H, Math.max(1, rx), Math.max(0.5, ry), 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+}
+
+if (!gl || !initWebGL()) {
+  if (gl) {
+    // 同一個 canvas 取過 WebGL context 後無法再取 2D context → 換新 canvas
+    var nc = canvas.cloneNode(false);
+    canvas.parentNode.replaceChild(nc, canvas);
+    canvas = nc;
+    gl = null;
+  }
+  initFallback2D();
+}
+})();
+</script>
+
+<!-- ══ 水路路徑（Python getImageData 色標分析結果 — 5 折閃電水路）══ -->
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Python 分析 2848×1600 背景圖像素結果：
+//   • M 門輝光區 (nx 0.16-0.39)：n=2000~18748 大量亮像素 → 閘門反光，非水路
+//   • 轉折點 (nx≈0.39)：Y 從 0.55 突然跳到 0.64（第 1 折）
+//   • 真實閃電水路 (nx 0.42-0.57, ny 0.64-0.71)：n=24-523 稀疏亮像素（5 折）
+//   • ORO 位置 (nx 0.65-0.74)：ny≈0.52（接近地平線）
+//
+// 舊算法「每欄取最亮像素」全部落在 M 門輝光 → 路徑錯誤 → 看起來直線
+// 新方案：直接使用分析結果的硬編碼座標（可靠，不受圖片載入影響）
+// ─────────────────────────────────────────────────────────────────────────────
+// ═══ 2026-07-13 Eason 校準定版：18 點路徑（角度＋尺寸全鎖定）═══
+window.waterTrailPath = [
+  {nx: 0.243, ny: 0.583, rotDeg: 52,  scaleMul: 0.20},
+  {nx: 0.291, ny: 0.598, rotDeg: 35,  scaleMul: 0.20},
+  {nx: 0.282, ny: 0.603, rotDeg: 7,   scaleMul: 0.20},
+  {nx: 0.251, ny: 0.611, rotDeg: 5,   scaleMul: 0.22},
+  {nx: 0.272, ny: 0.618, rotDeg: 30,  scaleMul: 0.22},
+  {nx: 0.328, ny: 0.622, rotDeg: 25,  scaleMul: 0.26},
+  {nx: 0.380, ny: 0.628, rotDeg: 22,  scaleMul: 0.28},
+  {nx: 0.428, ny: 0.635, rotDeg: 21,  scaleMul: 0.29},
+  {nx: 0.489, ny: 0.653, rotDeg: 19,  scaleMul: 0.30},
+  {nx: 0.475, ny: 0.664, rotDeg: -9,  scaleMul: 0.30},
+  {nx: 0.443, ny: 0.683, rotDeg: -9,  scaleMul: 0.32},
+  {nx: 0.456, ny: 0.690, rotDeg: 18,  scaleMul: 0.32},
+  {nx: 0.511, ny: 0.708, rotDeg: 22,  scaleMul: 0.33},
+  {nx: 0.574, ny: 0.736, rotDeg: 8,   scaleMul: 0.34},
+  {nx: 0.599, ny: 0.767, rotDeg: -4,  scaleMul: 0.36},
+  {nx: 0.565, ny: 0.791, rotDeg: -4,  scaleMul: 0.38},
+  {nx: 0.573, ny: 0.832, rotDeg: 0,   scaleMul: 0.38},
+  {nx: 0.542, ny: 0.915, rotDeg: -7,  scaleMul: 0.32}
+];
+window.waterTrailImgW = 2848;
+window.waterTrailImgH = 1600;
+// calibrator 同步檔優先（有 calibrator_config.json 就用它的路徑）
+if (window.__calCfg && Array.isArray(window.__calCfg.waterTrailPath) && window.__calCfg.waterTrailPath.length >= 2) {
+  window.waterTrailPath = window.__calCfg.waterTrailPath;
+}
+console.log('[Trail] ✓ 水路路徑載入，共 ' + window.waterTrailPath.length + ' 個路徑點');
+</script>
+
+<!-- ══ Three.js r128 ══ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
+<script>
+(function () {
+'use strict';
+
+var threeCanvas    = document.getElementById('three-canvas');
+var oroPlaceholder = document.getElementById('oro-placeholder');
+var bubble         = document.getElementById('bubble');
+var glbProg        = document.getElementById('glb-progress');
+var msgsEl         = document.getElementById('bubble-msgs');
+var chatIn         = document.getElementById('chat-in');
+
+// 佔位圖先淡入（GLB 載入期間顯示）
+setTimeout(function () { oroPlaceholder.classList.add('show'); }, 500);
+
+// ── Renderer ──
+var renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, antialias: true, alpha: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputEncoding      = THREE.sRGBEncoding;
+renderer.toneMapping         = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.68;  // ⬇ 暗，讓紋路與 LED 條清晰
+renderer.setClearColor(0x000000, 0);
+
+var scene  = new THREE.Scene();
+var camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 500);
+camera.position.set(0, 0, 6);
+
+var pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+scene.environment = pmrem.fromScene(new THREE.RoomEnvironment()).texture;
+
+// ── 燈光（主光弱，雙側強紫光恢復 LED 條）──
+scene.add(new THREE.AmbientLight(0x030608, 0.45));
+
+var keyLight = new THREE.DirectionalLight(0x009ec0, 0.70);  // 弱青主光
+keyLight.position.set(2, 3, 4); scene.add(keyLight);
+
+var rimL = new THREE.DirectionalLight(0x9922ff, 2.4);        // 左側強紫（LED）
+rimL.position.set(-3, 0.4, -0.4); scene.add(rimL);
+
+var rimR = new THREE.DirectionalLight(0x7711ee, 1.8);        // 右側紫補
+rimR.position.set(3, 0.4, -0.4); scene.add(rimR);
+
+var fillLight = new THREE.DirectionalLight(0x001535, 0.38);  // 底部微藍
+fillLight.position.set(0, -2, 3); scene.add(fillLight);
+
+var eyeGlow = new THREE.PointLight(0x00f2fe, 0.22, 8);
+eyeGlow.position.set(0.3, 0.5, 3); scene.add(eyeGlow);
+
+// ═══════════════════════════════════════════════════
+// 展示球（環狀選單改由 DOM CSS-3D 呈現，見頁尾 holo-ring）
+// 佔位球模型 → 把 Meshy 產生的 ball_oro.glb 放進
+// morow 網站/ 資料夾即自動替換
+// ═══════════════════════════════════════════════════
+(function () {
+  var RC = window.PAGE_RING_CFG || {};
+  if (!(RC.pages || []).length) return;
+  var SR = (typeof RC.sphereRadius === 'number') ? RC.sphereRadius : 0.34;
+  var RP = RC.position || { x: -1.9, y: -0.78, z: 1.5 };
+
+  var ringRoot = new THREE.Group();
+  ringRoot.position.set(RP.x, RP.y, RP.z);
+  scene.add(ringRoot);
+
+  // ── 展示球（佔位：白球＋發光環＋雙眼）──
+  var sphereGroup = new THREE.Group();
+  ringRoot.add(sphereGroup);
+  sphereGroup.add(new THREE.Mesh(
+    new THREE.SphereGeometry(SR, 32, 24),
+    new THREE.MeshStandardMaterial({ color: 0xf2f6fb, metalness: 0.3, roughness: 0.35 })
+  ));
+  var bandM = new THREE.Mesh(
+    new THREE.TorusGeometry(SR * 0.99, SR * 0.035, 8, 48),
+    new THREE.MeshBasicMaterial({ color: 0x33d6ff })
+  );
+  bandM.rotation.x = Math.PI / 2;
+  sphereGroup.add(bandM);
+  [-1, 1].forEach(function (sgn) {
+    var ex = sgn * SR * 0.42, ey = SR * 0.15;
+    var ez = Math.sqrt(Math.max(0.0001, SR * SR - ex * ex - ey * ey));
+    var eye = new THREE.Mesh(new THREE.CircleGeometry(SR * 0.26, 24),
+      new THREE.MeshBasicMaterial({ color: 0x59c8ff }));
+    eye.position.set(ex, ey, ez + 0.005);
+    eye.lookAt(new THREE.Vector3(ex * 3, ey * 3, ez * 3));
+    sphereGroup.add(eye);
+    var pupil = new THREE.Mesh(new THREE.CircleGeometry(SR * 0.11, 20),
+      new THREE.MeshBasicMaterial({ color: 0xb46cff }));
+    pupil.position.set(ex * 1.02, ey * 1.02, ez + 0.012);
+    pupil.lookAt(new THREE.Vector3(ex * 3, ey * 3, ez * 3));
+    sphereGroup.add(pupil);
+  });
+  // Meshy GLB 產生後自動替換佔位球
+  new THREE.GLTFLoader().load('./site-assets/ball_oro.glb?v=5', function (g) {
+    var m = g.scene;
+    var bb = new THREE.Box3().setFromObject(m);
+    var ctr = bb.getCenter(new THREE.Vector3());
+    var sz = bb.getSize(new THREE.Vector3());
+    var sc = (SR * 2) / Math.max(sz.x, sz.y, sz.z);
+    m.scale.setScalar(sc);
+    m.position.set(-ctr.x * sc, -ctr.y * sc, -ctr.z * sc);
+    while (sphereGroup.children.length) sphereGroup.remove(sphereGroup.children[0]);
+    sphereGroup.add(m);
+    console.log('[Ring] ✓ 展示球 GLB 已載入');
+  }, undefined, function () { /* 尚未放入 GLB → 使用佔位球 */ });
+
+  // ── 每幀：漂浮 + 發布「球頂螢幕座標」給 DOM 環狀選單當錨點 ──
+  var anchorV = new THREE.Vector3();
+  var BROT = ((typeof RC.ballRotDeg === 'number') ? RC.ballRotDeg : 0) * Math.PI / 180;
+  window.__ringTick = function (tt) {
+    ringRoot.position.y = RP.y + Math.sin(tt * 0.7) * 0.02;
+    sphereGroup.rotation.y = BROT + Math.sin(tt * 0.4) * 0.10;   // 輕擺 ±6°（避開接縫）
+    anchorV.set(ringRoot.position.x, ringRoot.position.y + SR * 0.95, ringRoot.position.z);
+    anchorV.project(camera);
+    window.__ringAnchor = {
+      x: (anchorV.x + 1) / 2 * innerWidth,
+      y: (1 - (anchorV.y + 1) / 2) * innerHeight
+    };
+  };
+})();
+// ── ORO Group ──
+var oroGroup   = new THREE.Group();
+scene.add(oroGroup);
+var clock      = new THREE.Clock();
+var modelReady = false;
+
+var SCALE_START = 0.30;    // 初始尺寸（calibrator 匯出 SCALE_START）
+var FINAL_SCALE = 1.05;    // 最終縮放（calibrator 匯出 finalScale）
+var WATER_BASE_Y = -0.309; // 水面基準 Y（calibrator 匯出 waterY）
+// calibrator 同步檔優先
+if (window.__calCfg) {
+  if (typeof window.__calCfg.SCALE_START === 'number') SCALE_START = window.__calCfg.SCALE_START;
+  if (typeof window.__calCfg.finalScale === 'number')  FINAL_SCALE = window.__calCfg.finalScale;
+  if (typeof window.__calCfg.waterY === 'number')      WATER_BASE_Y = window.__calCfg.waterY;
+}
+var centerPos   = new THREE.Vector3(1.5, WATER_BASE_Y, 0);
+
+// ── 圖片座標 → Three.js 世界座標轉換 ──────────────────────────
+
+// ny → Z 偏移（越深水路越靠近攝影機）
+// ny=0.52 (地平線) → 0，ny=0.71 (最深) → +2.0
+function nyToZOffset(ny) {
+  var NY_HORIZON = 0.52, NY_DEEP = 0.71;
+  return Math.max(0, (ny - NY_HORIZON) / (NY_DEEP - NY_HORIZON)) * 2.0;
+}
+
+// 圖片正規化座標 (nx, ny) → Three.js 世界座標 {x, y, z}
+// ─── 原理：Raycaster 從攝影機射穿 screen(nx,ny) 與 z=nyToZOffset(ny) 平面的交點
+// ─── 這樣 X、Y 都正確（考慮透視+Z深度），腳輪下緣可直接對齊水路像素座標
+function trailToWorld(nx, ny, imgW, imgH) {
+  var sw = innerWidth, sh = innerHeight;
+  var sc  = Math.max(sw / imgW, sh / imgH);
+  var oX  = (sw - imgW * sc) / 2;
+  var oY  = (sh - imgH * sc) / 2;
+  var ndcX =  ((nx * imgW * sc + oX) / sw)  * 2 - 1;
+  var ndcY = -(((ny * imgH * sc + oY) / sh) * 2 - 1);
+  var tz   = nyToZOffset(ny);  // 目標 Z 平面
+
+  var tmpR = new THREE.Raycaster();
+  tmpR.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+  var dz = tmpR.ray.direction.z;
+  if (Math.abs(dz) < 1e-5) return null;
+  var t  = (tz - tmpR.ray.origin.z) / dz;
+  if (t <= 0) return null;
+  return {
+    x: tmpR.ray.origin.x + t * tmpR.ray.direction.x,
+    y: tmpR.ray.origin.y + t * tmpR.ray.direction.y,
+    z: tz
+  };
+}
+
+// ORO 起點：對齊 trail 第一點 (nx≈0.20, 在 M 門輝光右緣)
+oroGroup.position.set(-2.5, centerPos.y, nyToZOffset(0.54));
+
+var raycaster  = new THREE.Raycaster();
+var mouse2D    = new THREE.Vector2();
+var baseRotY   = -0.3;
+// 路徑終點角度 = 角度 keyframe 在終點的值（最後鎖定點持續生效）→ 結尾不再額外旋轉
+baseRotY = trailKeyframedRot(1, baseRotY);
+var targetRotY = baseRotY, currentRotY = baseRotY;
+var targetRotX = 0,        currentRotX = 0;
+
+// 待機漂浮（calibrator 匯出 water.oroFloat 可調）
+var OF = (window.WATER_CFG && WATER_CFG.oroFloat) || {};
+var FLOAT_AMP   = (typeof OF.amp   === 'number') ? OF.amp   : 0.05;
+var FLOAT_SPEED = (typeof OF.speed === 'number') ? OF.speed : 0.90;
+
+var entranceState = 'waiting';
+var entranceTStart = -1;    // 入場開始的真實 clock 時間（避免固定步長抖動）
+var entranceRotY   = baseRotY;  // 入場面朝角度（平滑插值）
+var floatT0 = -1;           // 懸浮開始時間（相位歸零 → 從靜止緩緩盪起）
+
+// ── 入場淡入：前 15% 路程從透明浮現（像從閃電門中走出來）──
+var fadeMats = [], fadeDone = false;
+var FADE_PORTION = 0.15;
+function setOroOpacity(op) {
+  for (var i = 0; i < fadeMats.length; i++) {
+    var m = fadeMats[i];
+    if (op < 1) {
+      m.transparent = true;
+      m.opacity = m.userData._origOpacity * op;
+    } else {
+      m.opacity = m.userData._origOpacity;
+      m.transparent = m.userData._origTransparent;
+    }
+  }
+}
+window.oroEnteringProgress = 0;
+window.oroScreenX = 0.22;
+window.oroScreenY = 0.54;
+
+function easeInOutSine(t) {
+  return -(Math.cos(Math.PI * t) - 1) / 2;
+}
+
+// Catmull-Rom 曲線取樣：通過每個路徑點、點間平滑（走起來更自然）
+function crTrail(pts, idx) {
+  var n = pts.length;
+  if (n === 0) return null;
+  if (n === 1) return { nx: pts[0].nx, ny: pts[0].ny };
+  var i = Math.floor(idx); if (i > n - 2) i = n - 2; if (i < 0) i = 0;
+  var t = Math.min(1, Math.max(0, idx - i));
+  var p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(n - 1, i + 2)];
+  var t2 = t * t, t3 = t2 * t;
+  function cr(a, b, c, d) {
+    return 0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+  }
+  return { nx: cr(p0.nx, p1.nx, p2.nx, p3.nx), ny: cr(p0.ny, p1.ny, p2.ny, p3.ny) };
+}
+
+// ── 腳輪底部投影到螢幕（供水波引擎產生滑水痕跡）──────────────
+function updateFeetScreenPos() {
+  var lby = oroGroup.userData.localBottomY || -1.1;
+  var wp = new THREE.Vector3(
+    oroGroup.position.x,
+    oroGroup.position.y + lby * oroGroup.scale.y,
+    oroGroup.position.z
+  );
+  wp.project(camera);
+  window.oroScreenX = (wp.x + 1) / 2;
+  window.oroScreenY = (1 - (wp.y + 1) / 2);
+  // 目前縮放比例（入場 0.26 → 1.0），雙腳波源間距隨之縮放
+  window.oroScreenScale = oroGroup.scale.y / (oroGroup.userData.baseScale || 1);
+}
+
+// ── 路徑點鎖定角度 keyframe 內插（rotDeg 由 calibrator 匯出，鎖定點間線性內插）──
+function trailKeyframedRot(prog, autoRot) {
+  var trail = window.waterTrailPath;
+  if (!trail || trail.length < 2) return autoRot;
+  var kf = [];
+  for (var i = 0; i < trail.length; i++) {
+    if (trail[i].rotDeg !== null && trail[i].rotDeg !== undefined) {
+      kf.push({ prog: i / (trail.length - 1), rotY: trail[i].rotDeg * Math.PI / 180 });
+    }
+  }
+  if (!kf.length) return autoRot;
+  var prev = null, next = null;
+  for (var j = 0; j < kf.length; j++) {
+    if (kf[j].prog <= prog) prev = kf[j];
+    if (kf[j].prog >= prog && next === null) next = kf[j];
+  }
+  if (!prev && next) return next.rotY;
+  if (!next && prev) return prev.rotY;
+  if (prev.prog === next.prog) return prev.rotY;
+  var t = (prog - prev.prog) / (next.prog - prev.prog);
+  return prev.rotY + (next.rotY - prev.rotY) * t;
+}
+
+// ── 尺寸 keyframe（scaleMul 由 calibrator 匯出，純手動制）──
+// 沒有尺寸鎖定 → 預設自動曲線；有鎖定 → 鎖定點前後維持、之間線性（不自動變大）
+function trailKeyframedScale(prog) {
+  var trail = window.waterTrailPath;
+  var kf = [];
+  if (trail && trail.length > 1) {
+    for (var i = 0; i < trail.length; i++) {
+      if (trail[i].scaleMul !== null && trail[i].scaleMul !== undefined) {
+        kf.push({ prog: i / (trail.length - 1), v: trail[i].scaleMul });
+      }
+    }
+  }
+  if (!kf.length) return (SCALE_START + (1 - SCALE_START) * prog) * FINAL_SCALE;
+  var prev = null, next = null;
+  for (var j = 0; j < kf.length; j++) {
+    if (kf[j].prog <= prog) prev = kf[j];
+    if (kf[j].prog >= prog && next === null) next = kf[j];
+  }
+  if (!prev && next) return next.v;
+  if (!next && prev) return prev.v;
+  if (prev.prog === next.prog) return prev.v;
+  var t = (prog - prev.prog) / (next.prog - prev.prog);
+  return prev.v + (next.v - prev.v) * t;
+}
+
+// ── GLB 載入 ──
+var GLB_PATH = './site-assets/oro_robot.glb?v=2';   // v2 = 減肥版（46.4MB→5.5MB）
+glbProg.classList.add('show');
+var loader = new THREE.GLTFLoader();
+loader.load(
+  GLB_PATH,
+  function (gltf) {
+    var model = gltf.scene;
+    var box   = new THREE.Box3().setFromObject(model);
+    var ctr   = box.getCenter(new THREE.Vector3());
+    var size  = box.getSize(new THREE.Vector3());
+    var s     = 2.2 / Math.max(size.x, size.y, size.z);
+    model.scale.setScalar(s);
+    model.position.set(-ctr.x * s, -ctr.y * s, -ctr.z * s);
+    model.traverse(function (c) {
+      if (c.isMesh && c.material) {
+        c.material.envMapIntensity = 0.45;
+        if (c.material.emissiveMap) {
+          c.material.emissiveIntensity = 2.8; // 增強 LED 自發光
+        }
+        // 記錄原始透明設定 → 入場淡入用
+        c.material.userData._origTransparent = c.material.transparent;
+        c.material.userData._origOpacity = (typeof c.material.opacity === 'number') ? c.material.opacity : 1;
+        fadeMats.push(c.material);
+      }
+    });
+    oroGroup.userData.baseScale = s;
+    // ── 腳輪下緣 oroGroup 本地 Y（用於讓輪子貼水面）──────────
+    var halfH = (size.y * s) / 2;          // 模型半高，oroGroup 本地單位
+    oroGroup.userData.localBottomY = -halfH; // 輪子在 group 中心之下 halfH
+    centerPos.y = WATER_BASE_Y + halfH * s; // 讓輪子貼水面基準 Y 時的 group 中心 Y
+    // ─────────────────────────────────────────────────────────
+    oroGroup.scale.setScalar(s * SCALE_START * FINAL_SCALE);
+    oroGroup.add(model);
+    modelReady = true;
+    oroPlaceholder.classList.add('hidden');
+    threeCanvas.classList.add('active');
+    glbProg.classList.remove('show');
+    entranceTStart = clock.getElapsedTime();  // 記錄入場開始時間（用 clock 避免抖動）
+    entranceState  = 'sliding';
+  },
+  function (p) {
+    if (p.total) glbProg.textContent = 'ORO ' + Math.round(p.loaded / p.total * 100) + '%';
+  },
+  function (err) {
+    glbProg.classList.remove('show');
+    oroPlaceholder.classList.remove('hidden');
+    console.warn('GLB load failed:', err);
+  }
+);
+
+// ── 滑鼠：跟隨轉頭（以路徑終點角度為中心的輕微轉動）＋ 游標提示 ──
+document.addEventListener('mousemove', function (e) {
+  if (entranceState !== 'done') return;
+  targetRotY = baseRotY + (e.clientX / innerWidth  - 0.5) * 0.8;
+  targetRotX =            (e.clientY / innerHeight - 0.5) * 0.25;
+  if (modelReady) {
+    mouse2D.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+    raycaster.setFromCamera(mouse2D, camera);
+    document.body.style.cursor =
+      raycaster.intersectObjects(oroGroup.children, true).length > 0 ? 'pointer' : '';
+  }
+});
+
+// ── 對話 ──
+function openBubble() {
+  bubble.classList.add('open');
+  setTimeout(function () { chatIn.focus(); }, 350);
+}
+
+// ── ORO 語音＋場景音效 ─────────────────────────────
+// 語音：只播 morow 網站/oro_voice_1~3.mp3（用 GEN_ORO_VOICE.bat 生成的兒童聲線）；
+//       沒有檔案時保持安靜（不再使用瀏覽器合成語音）。
+// 音效：背景環境音（微風＋輕閃電，循環）＋ ORO 入場划水聲。
+var VOICE_DIR = './site-assets/';
+// 預先載入三句語音到記憶體（blob）→ 播放中零網路讀取、不會卡頓
+var voiceReady = [null, null, null];
+var curVoice = null, pendingVoice = -1, voiceRetry = null;
+var onVoiceEnd = null;   // startIntro 掛上：一句唸完 → 接下一句
+(function preloadVoices() {
+  [0, 1, 2].forEach(function (i) {
+    fetch(VOICE_DIR + 'oro_voice_' + (i + 1) + '.mp3?t=' + Date.now())
+      .then(function (r) { if (!r.ok) throw 0; return r.blob(); })
+      .then(function (b) {
+        var a = new Audio(URL.createObjectURL(b));
+        a.preload = 'auto'; a.volume = 0.95;
+        voiceReady[i] = a;
+      }).catch(function () {});
+  });
+})();
+function stopVoice() {
+  if (voiceRetry) { clearInterval(voiceRetry); voiceRetry = null; }
+  if (curVoice) { try { curVoice.onended = null; curVoice.pause(); } catch (e) {} curVoice = null; }
+}
+function speakLine(i) {
+  if (i < 0 || i > 2 || !voiceReady[i]) return false;
+  stopVoice();
+  var a = voiceReady[i];
+  curVoice = a;
+  try { a.currentTime = 0; } catch (e) {}
+  a.onended = function () { if (onVoiceEnd) onVoiceEnd(i); };
+  function tryPlay() {
+    var p = a.play();
+    if (p && p.then) {
+      p.then(function () {
+        hideVoiceHint(); pendingVoice = -1;
+        if (voiceRetry) { clearInterval(voiceRetry); voiceRetry = null; }
+      }).catch(function () { pendingVoice = i; showVoiceHint(); });
+    }
+  }
+  tryPlay();
+  // 自動重試：瀏覽器一允許出聲（任何互動後）立刻自己開口，不必等特定點擊
+  voiceRetry = setInterval(function () {
+    if (curVoice !== a) { clearInterval(voiceRetry); voiceRetry = null; return; }
+    if (a.paused && pendingVoice === i) tryPlay();
+  }, 600);
+  return true;
+}
+function showVoiceHint() {
+  var h = document.getElementById('voice-hint');
+  if (h) h.classList.add('show');
+}
+function hideVoiceHint() {
+  var h = document.getElementById('voice-hint');
+  if (h) h.classList.remove('show');
+}
+// ── 場景音效（Eason 挑選的 mixkit 素材，2026-07-14）──
+// 風切聲：低音量持續循環；划水聲：ORO 入場經過第 1、5、10 點時各播一聲
+var windAudio = null, splashBase = null, windOn = false;
+fetch(VOICE_DIR + 'wind.mp3?t=' + Date.now())
+  .then(function (r) { if (!r.ok) throw 0; return r.blob(); })
+  .then(function (b) {
+    windAudio = new Audio(URL.createObjectURL(b));
+    windAudio.loop = true; windAudio.volume = 0.35;   // 持續循環
+    tryWind();
+  }).catch(function () {});
+fetch(VOICE_DIR + 'splash.mp3?t=' + Date.now())
+  .then(function (r) { if (!r.ok) throw 0; return r.blob(); })
+  .then(function (b) { splashBase = new Audio(URL.createObjectURL(b)); })
+  .catch(function () {});
+function tryWind() {
+  if (windOn || !windAudio) return;
+  var p = windAudio.play();
+  if (p && p.then) p.then(function () { windOn = true; }).catch(function () {});
+}
+var windTimer = setInterval(function () {   // 瀏覽器一允許出聲就自動開始吹風
+  tryWind();
+  if (windOn) clearInterval(windTimer);
+}, 800);
+function playSplash() {
+  if (!splashBase) return;
+  var s = splashBase.cloneNode();
+  s.volume = 1.0;
+  var p = s.play(); if (p && p.catch) p.catch(function () {});
+}
+var splashPts = [0, 4, 9], splashDone = {};   // 第 1、5、10 個路徑點（索引 0/4/9）
+window.__splashCheck = function (rawIdx) {
+  for (var k = 0; k < splashPts.length; k++) {
+    if (!splashDone[splashPts[k]] && rawIdx >= splashPts[k]) {
+      splashDone[splashPts[k]] = true;
+      playSplash();
+    }
+  }
+};
+// 首次互動：解鎖並補播語音＋風聲
+['pointerdown', 'keydown'].forEach(function (ev) {
+  document.addEventListener(ev, function () {
+    hideVoiceHint();
+    tryWind();
+    if (pendingVoice >= 0) { var i = pendingVoice; pendingVoice = -1; speakLine(i); }
+  }, { capture: true });
+});
+
+// ── 入場結束 → ORO 自動介紹網站功能（一次性，字幕與語音同步）──
+// 節奏由語音主導：一句「唸完」才接下一句（不會再切斷長句）；
+// 無聲（被瀏覽器擋或檔案缺失）時退回固定節奏走字幕。
+var introDone = false;
+function startIntro() {
+  if (introDone) return;
+  introDone = true;
+  openBubble();
+  var introMsgs = [
+    '嗨，我是 ORO，叫我歐若也行 👋 歡迎來到莫羅工作室！',
+    '我們用 AI 幫設備廠商做行銷 — 服務方案、作品集、AI 影片都在旁邊的藍色視窗環裡，轉轉看！',
+    '或直接告訴我你的設備，馬上幫你規劃 🚀'
+  ];
+  var idx = 0, advTimer = null;
+  function schedule(ms) { clearTimeout(advTimer); advTimer = setTimeout(next, ms); }
+  onVoiceEnd = function (i) {
+    if (i === idx - 1) { clearTimeout(advTimer); advTimer = setTimeout(next, 650); }
+  };
+  function next() {
+    clearTimeout(advTimer);
+    if (idx >= introMsgs.length) { onVoiceEnd = null; return; }
+    var dot = showTyping();
+    setTimeout(function () {
+      dot.remove();
+      addMsg(introMsgs[idx], 'oro');
+      var spoke = speakLine(idx);         // 字幕出現同步開口
+      var a = curVoice;
+      idx++;
+      if (!spoke) { schedule(3600); return; }
+      // 800ms 後確認是否真的在播：在播→依音檔長度設保底；被擋→字幕照固定節奏走
+      setTimeout(function () {
+        if (a && !a.paused) {
+          var d = (isFinite(a.duration) && a.duration > 0) ? a.duration : 7;
+          schedule(d * 1000 + 1500);      // 保底（正常由 onVoiceEnd 提前接手）
+        } else {
+          schedule(3200);
+        }
+      }, 800);
+    }, idx === 0 ? 600 : 900);
+  }
+  next();
+}
+oroPlaceholder.addEventListener('click', openBubble);
+threeCanvas.addEventListener('click', function (e) {
+  if (!modelReady || entranceState !== 'done') return;
+  mouse2D.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  raycaster.setFromCamera(mouse2D, camera);
+  if (raycaster.intersectObjects(oroGroup.children, true).length > 0) openBubble();
+});
+document.getElementById('close-bubble').addEventListener('click', function () {
+  bubble.classList.remove('open');
+  stopVoice();                          // 關閉對話窗同時停止語音
+});
+
+function addMsg(text, type) {
+  var el = document.createElement('div');
+  el.className = 'msg ' + type;
+  el.innerHTML = text.replace(/\n/g, '<br>');
+  msgsEl.appendChild(el);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+}
+function showTyping() {
+  var el = document.createElement('div');
+  el.className = 'typing';
+  el.innerHTML = '<span></span><span></span><span></span>';
+  msgsEl.appendChild(el);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+  return el;
+}
+function sendMsg() {
+  var txt = chatIn.value.trim(); if (!txt) return;
+  addMsg(txt, 'user'); chatIn.value = '';
+  var dot = showTyping();
+  setTimeout(function () {
+    dot.remove();
+    addMsg('收到您的需求！我們將為您的設備制定：\n\n• Mark 口播腳本（50秒精華版）\n• 5 組標題 + 30 個 Hashtag\n• YouTube / LinkedIn / Instagram 同步發布\n\n請問主要目標市場在哪裡？', 'oro');
+  }, 1300);
+}
+document.getElementById('send-btn').addEventListener('click', sendMsg);
+chatIn.addEventListener('keydown', function (e) { if (e.key === 'Enter') sendMsg(); });
+
+// ── 動畫 ──
+function animate() {
+  requestAnimationFrame(animate);
+  var t  = clock.getElapsedTime();
+  var bs = oroGroup.userData.baseScale || 1;
+
+  if (entranceState === 'sliding') {
+    var trail = window.waterTrailPath;
+    var lby   = oroGroup.userData.localBottomY || -1.1;
+
+    // ── 第一幀初始化：計時 + 讓初始朝向對齊路徑第一段方向 ──
+    if (entranceTStart < 0) {
+      entranceTStart = t;
+      // 計算起始方向，避免第一幀轉身跳動
+      if (trail && trail.length >= 2 && window.waterTrailImgW) {
+        var wpt0 = trailToWorld(trail[0].nx, trail[0].ny, window.waterTrailImgW, window.waterTrailImgH);
+        var wpt1 = trailToWorld(trail[1].nx, trail[1].ny, window.waterTrailImgW, window.waterTrailImgH);
+        if (wpt0 && wpt1) {
+          var dx0 = wpt1.x - wpt0.x, dz0 = wpt1.z - wpt0.z;
+          if (dx0*dx0 + dz0*dz0 > 0.0001) {
+            entranceRotY = Math.atan2(-dx0, -dz0);
+            oroGroup.rotation.y = entranceRotY;
+          }
+        }
+      }
+    }
+
+    var SLIDE_DUR = (window.__calCfg && typeof window.__calCfg.simDur === 'number')
+      ? window.__calCfg.simDur : 5.5;   // 入場時長：跟隨 calibrator 同步的「時長 s」
+    var sp = Math.min((t - entranceTStart) / SLIDE_DUR, 1.0);
+    var ep = easeInOutSine(sp);
+
+    // 淡入：從閃電門中浮現
+    if (!fadeDone) {
+      var fade = Math.min(1, sp / FADE_PORTION);
+      setOroOpacity(fade);
+      if (fade >= 1) fadeDone = true;
+    }
+
+    if (trail && trail.length >= 2 && window.waterTrailImgW) {
+      var rawIdx = ep * (trail.length - 1);
+      if (window.__splashCheck) window.__splashCheck(rawIdx);   // 第1/5/10點划水聲
+      var cp = crTrail(trail, rawIdx);   // Catmull-Rom 平滑取樣
+
+      // ── 腳輪精確貼合水路：Raycaster 投影 (nx,ny) 到 z=nyToZOffset 平面 ──
+      var wpt = trailToWorld(cp.nx, cp.ny, window.waterTrailImgW, window.waterTrailImgH);
+      if (wpt) {
+        // 先設尺寸（位置計算需要 oroGroup.scale.y）；含 scaleMul 鎖定點
+        oroGroup.scale.setScalar(bs * trailKeyframedScale(ep));
+
+        oroGroup.position.x = wpt.x;
+        oroGroup.position.z = wpt.z;
+        // 腳輪底緣 = wpt.y（水路世界 Y）
+        // group.position.y = wpt.y - localBottomY * groupScale
+        oroGroup.position.y = wpt.y - lby * oroGroup.scale.y;
+
+        // ── 面朝前進方向（前看 0.4 路徑步長，曲線取樣）───────────
+        var fIdx = Math.min(rawIdx + 0.4, trail.length - 1);
+        var cp2  = crTrail(trail, fIdx);
+        var wpt2 = trailToWorld(cp2.nx, cp2.ny, window.waterTrailImgW, window.waterTrailImgH);
+        var rotTarget = entranceRotY;
+        if (wpt2) {
+          var dx = wpt2.x - wpt.x, dz = wpt2.z - wpt.z;
+          if (dx*dx + dz*dz > 0.0001) {
+            // Three.js 預設 forward=-Z，旋轉角 = atan2(-dx,-dz) 使物件朝 (dx,0,dz)
+            var faceY = Math.atan2(-dx, -dz);
+            var blend = Math.max(0, (sp - 0.8) / 0.2);  // 最後 20% 漸回 baseRotY
+            rotTarget = faceY*(1-blend) + baseRotY*blend;
+          }
+        }
+        // 套用 calibrator 匯出的鎖定角度 keyframe，結尾 15% 平滑回最終轉角
+        rotTarget = trailKeyframedRot(ep, rotTarget);
+        var blendEnd = Math.max(0, (sp - 0.85) / 0.15);
+        rotTarget = rotTarget*(1-blendEnd) + baseRotY*blendEnd;
+        entranceRotY += (rotTarget - entranceRotY) * 0.12;
+        oroGroup.rotation.y = entranceRotY;
+        currentRotY = entranceRotY;
+      }
+    } else {
+      // 退回直線入場
+      oroGroup.scale.setScalar(bs * trailKeyframedScale(ep));
+      oroGroup.position.x = -2.5 + (centerPos.x - (-2.5)) * ep;
+      oroGroup.position.y = centerPos.y;
+      oroGroup.position.z = 0;
+    }
+
+    window.oroEnteringProgress = Math.sin(Math.PI * sp) * 0.88;
+
+    updateFeetScreenPos();  // 腳輪底部 → 水波引擎滑水痕跡
+
+    if (sp >= 1.0) {
+      // 停在路徑終點（不跳位、不漂移），確保 done 狀態接續無跳動
+      centerPos.x = oroGroup.position.x;
+      centerPos.y = oroGroup.position.y;
+      oroGroup.rotation.y = baseRotY;
+      currentRotY = baseRotY;
+      entranceState = 'done';
+      floatT0 = t;                   // 懸浮相位歸零：從靜止位置緩緩盪起
+      setOroOpacity(1); fadeDone = true;
+      window.oroEnteringProgress = 0;
+      // 入場結束 → 光束閃爍點亮 → 橢圓圈 → 視窗展開 → ORO 自我介紹
+      setTimeout(function () {
+        if (window.__ringReveal) window.__ringReveal(function () { setTimeout(startIntro, 400); });
+        else startIntro();
+      }, 600);
+    }
+  }
+  else if (entranceState === 'done') {
+    // 停在路徑終點懸浮：sin 相位歸零 + 前 2.5 秒振幅漸增 → 銜接無跳動
+    var ft = t - floatT0;
+    oroGroup.position.y = centerPos.y +
+      Math.sin(ft * FLOAT_SPEED) * FLOAT_AMP * Math.min(1, ft / 2.5);
+    currentRotY += (targetRotY - currentRotY) * 0.05;
+    currentRotX += (targetRotX - currentRotX) * 0.05;
+    oroGroup.rotation.y = currentRotY;
+    oroGroup.rotation.x = currentRotX;
+    updateFeetScreenPos();  // 待機漂浮時持續更新腳底位置（輕漣漪）
+  }
+
+  if (modelReady) {
+    eyeGlow.intensity = 0.18 + Math.sin(t * 2.0) * 0.10;
+    eyeGlow.color.setHSL(0.52 + Math.sin(t * 0.3) * 0.02, 1, 0.6);
+  }
+
+  if (window.__ringTick) window.__ringTick(t);
+
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', function () {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+})();
+</script>
+</body>
+</html>
