@@ -458,6 +458,52 @@
       font-family:'Noto Sans TC',sans-serif;
     }
     .rp-content.front .rp-title { text-shadow:0 0 20px rgba(170,240,255,1), 0 0 8px rgba(200,250,255,0.9); }
+    /* ══ 手機平面分頁投影（取代 3D 橢圓環；由球投射，上半屏大影片＋滑動換頁）══ */
+    #pager {
+      position:absolute; left:0; bottom:var(--beamH, 90px);
+      transform:translateX(-50%);
+      width:94vw; pointer-events:auto;
+    }
+    #pager-frame {
+      width:100%; height:calc(94vw * 9 / 16);
+      overflow:hidden; border-radius:12px;
+      border:1.5px solid rgba(125,215,255,0.9);
+      background:linear-gradient(180deg, rgba(58,150,240,0.30), rgba(26,88,190,0.16));
+      backdrop-filter:blur(6px) saturate(1.3);
+      -webkit-backdrop-filter:blur(6px) saturate(1.3);
+      box-shadow:0 0 22px rgba(120,215,255,0.5), inset 0 0 14px rgba(120,215,255,0.22);
+      transform:scaleY(0.001); transform-origin:bottom center;
+      touch-action:pan-y;   /* 水平滑動交給分頁邏輯 */
+      cursor:grab;
+    }
+    #pager.open #pager-frame {
+      transition:transform .6s cubic-bezier(.2,1.2,.3,1);
+      transform:scaleY(1);
+    }
+    #pager-track { display:flex; height:100%; transition:transform .32s cubic-bezier(.25,.8,.3,1); }
+    #pager-track.nosnap { transition:none; }
+    .pg-page {
+      flex:0 0 100%; height:100%;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      color:#eaffff; user-select:none; -webkit-user-select:none;
+    }
+    .pg-page .rp-line { width:56%; }
+    .pg-page.pg-video { background:#041226; }   /* webm 帶 alpha：深色底避免透出背景 */
+    .pg-page.pg-video video {
+      width:100%; height:100%; object-fit:cover; display:block; pointer-events:none;
+    }
+    #pager-dots {
+      display:flex; gap:8px; justify-content:center; margin-top:10px;
+      opacity:0; transition:opacity .5s .3s; pointer-events:auto;
+    }
+    #pager.open #pager-dots { opacity:1; }
+    .pg-dot {
+      width:7px; height:7px; border-radius:50%;
+      background:rgba(140,220,255,0.28); border:1px solid rgba(150,230,255,0.5);
+      cursor:pointer;
+    }
+    .pg-dot.on { background:rgba(170,240,255,0.95); box-shadow:0 0 8px rgba(150,230,255,0.9); }
+    #holo-ring.pre-reveal #pager, #holo-ring.stage-beam #pager { visibility:hidden; }
     .ring-strip.flash, .rp-content.flash { animation:panelFlash 0.25s ease; }
     @keyframes panelFlash { 50% { filter:brightness(2); } }
     .ring-arrow {
@@ -508,6 +554,43 @@
     }
     #ring-ellipse.fade { animation:ellipseFade 0.7s ease forwards; }
     @keyframes ellipseFade { from { opacity:1; } to { opacity:0; } }
+
+    /* ══ 手機直式 RWD（寬 ≤900 且直式；桌機完全不受影響）══ */
+    @media (max-width: 900px) and (orientation: portrait) {
+      /* 標題：手機字級（2026-07-17 Eason：整體 +20%） */
+      #logo-text { font-size:12px; letter-spacing:5px; top:16px; }
+      #logo-line { top:38px; width:132px; }
+      .corner { width:26px; height:26px; }
+      .corner.tl { top:12px; left:12px; }  .corner.tr { top:12px; right:12px; }
+      .corner.bl { bottom:12px; left:12px; } .corner.br { bottom:12px; right:12px; }
+      /* 底部：狀態列與提示分層，不再重疊 */
+      #status-bar { left:16px; bottom:16px; gap:6px; }
+      .s-item { font-size:7px; letter-spacing:1.5px; }
+      #click-hint { bottom:58px; font-size:9px; letter-spacing:3px; }
+      #glb-progress { bottom:16px; right:14px; }
+      /* 天空投影：手機取消獨立區塊（主題影片已併入橢圓轉體，見 PAGE_RING_CFG 手機分支） */
+      #sky-video, #sky-video-halo, #sky-video-refl { display:none !important; }
+      /* ORO 佔位圖同步縮小 */
+      #oro-placeholder img { height:22vh !important; }
+      /* ORO 對話泡泡：貼底壓縮版（留 3-4 行字，可稍蓋 ORO 腳輪） */
+      #bubble {
+        left:10px; right:10px; bottom:10px;
+        width:auto; max-height:33vh;
+        transform-origin:bottom center;
+      }
+      #bubble::after { display:none; }
+      .bubble-head { padding:8px 12px 6px; }
+      .bubble-msgs { padding:8px 12px; gap:6px; max-height:19vh; }
+      .msg { font-size:13px; padding:7px 11px; }
+      #chat-in { font-size:16px; }   /* ≥16px：防止 iOS 聚焦時自動縮放頁面 */
+      #send-btn { width:42px; height:42px; }
+      /* 分頁投影：文字與觸控鍵適配；箭頭對齊上半屏分頁區 */
+      .rp-title { font-size:16px; letter-spacing:2px; }
+      .rp-btn { width:88px; height:30px; }
+      .ring-arrow { position:fixed; bottom:auto; width:44px; height:44px; font-size:22px; }  /* top 由 JS 對齊分頁視窗垂直中心 */
+      #ring-prev { left:6px; }
+      #ring-next { left:auto; right:6px; }
+    }
   </style>
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-8H3PG9LZV1"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-8H3PG9LZV1');</script>
@@ -667,6 +750,56 @@ try {
       + (__c.waterTrailPath ? '（' + __c.waterTrailPath.length + ' 路徑點）' : ''));
   }
 } catch (e) { /* 無同步檔 → 使用內建烙定預設值 */ }
+
+// ═══ 手機直式適配（寬 ≤900 且直式）═══
+// 展示球是桌機校準的世界座標，手機窄畫面會投影到螢幕外 →
+// 直式載入時把球移到畫面約 30% 寬處（依長寬比換算），環狀選單/光束/天空投影錨點全部自動跟隨。
+window.__isMobile = function () {
+  return innerWidth <= 900 && innerWidth < innerHeight;
+};
+if (window.__isMobile()) {
+  var __R2 = window.PAGE_RING_CFG;
+  // 手機版 v2 佈局（2026-07-17 Eason 定案）：
+  // 上半屏＝大影片/分頁投影（平面滑動換頁，取代 3D 橢圓環）；
+  // 球縮小、置中、上移，投射光束到分頁區；ORO 縮小站球左側；對話列貼底壓縮
+  __R2.position = {
+    x: 0,       // 球置中（camera 在 x=0 軸上 → 螢幕正中）
+    y: -0.42,   // ★ 球高度：比桌機高（球心約螢幕 63% 高），對話列不會蓋到
+    z: (__R2.position && typeof __R2.position.z === 'number') ? __R2.position.z : 1.7
+  };
+  __R2.sphereRadius = Math.min(0.18, ((typeof __R2.sphereRadius === 'number') ? __R2.sphereRadius : 0.27) * 0.65);  // ★ 球縮小
+  __R2.pages = ([{ title: '主題影片', url: '', video: './site-assets/theme_creatorcloud.webm?v=2' }]).concat(__R2.pages || []);
+  // ★ 手機星星減量（桌機維持 calibrator 校準值）
+  if (window.WATER_CFG && window.WATER_CFG.stars) window.WATER_CFG.stars.count = 100;
+}
+// ═══ 全景平移（手機入場運鏡）：背景圖 / 水面 / M門 / 3D 同步橫移 ═══
+// 手機視窗只看到寬背景圖的一部分 → 入場時「視窗中心」跟著 ORO 移動（正的 px = 視野往左移）
+window.__scenePanX = 0;
+window.__setScenePan = function (px) {
+  px = px || 0;
+  if (Math.abs(px - window.__scenePanX) < 0.4) return;   // 變化太小不重算
+  window.__scenePanX = px;
+  var bg = document.getElementById('bg-img');
+  if (bg) {
+    var sc = Math.max(innerWidth / 2848, innerHeight / 1600);
+    var offX = (innerWidth - 2848 * sc) / 2;
+    bg.style.backgroundPosition = (offX + px) + 'px center';
+  }
+  if (window.__ripplePan) window.__ripplePan(px);   // 水面引擎（背景取樣偏移）
+  if (window.__portalPan) window.__portalPan(px);   // M 門（畫布定位偏移）
+};
+
+// 跨越手機/桌機分界（旋轉螢幕、調整視窗）→ 重新載入以重新組成畫面
+(function () {
+  var wasMob = window.__isMobile();
+  var tmr = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(tmr);
+    tmr = setTimeout(function () {
+      if (window.__isMobile() !== wasMob) location.reload();
+    }, 350);
+  });
+})();
 </script>
 
 <!-- ══ 主題影片全息投影（右上天空）══ -->
@@ -682,6 +815,7 @@ try {
 })();
 // 主題影片：展示光束開啟時才淡入＋開始播放（由 __ringReveal 呼叫）
 window.__skyVideoOn = function () {
+  if (window.__isMobile && window.__isMobile()) return;  // 手機：影片已併入轉體環，天空投影不啟動
   ['sky-video', 'sky-video-halo', 'sky-video-refl'].forEach(function (id) {
     var el = document.getElementById(id);
     if (el) el.classList.add('on');
@@ -694,6 +828,14 @@ window.__skyVideoOn = function () {
 (function () {
   var ids = ['sky-video-halo', 'sky-video', 'sky-video-refl'];
   function place() {
+    if (window.__isMobile && window.__isMobile()) {
+      // 手機：投影固定置中（CSS 控制），清掉桌機殘留的 inline 定位
+      ids.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) { el.style.left = ''; el.style.right = ''; }
+      });
+      return;
+    }
     var a = window.__ringAnchor;
     if (!a) return;
     ids.forEach(function (id) {
@@ -737,6 +879,146 @@ var openY = 0;                                        // 視窗展開比例（0=
 var revealed = false;                                 // 入場序列是否已跑過
 root.classList.add('pre-reveal', 'no-arrows');        // ORO 定位前：光束＋視窗環全部隱藏
 
+// ═══════════════════════════════════════════════════════════════
+// 手機直式：平面分頁投影（大影片＋滑動換頁），取代 3D 橢圓環
+// 桌機完全不進此分支，以下 return 前為手機專屬邏輯
+// ═══════════════════════════════════════════════════════════════
+if (window.__isMobile && window.__isMobile()) {
+  var pager = document.createElement('div');
+  pager.id = 'pager';
+  pager.innerHTML = '<div id="pager-frame"><div id="pager-track"></div></div><div id="pager-dots"></div>';
+  root.appendChild(pager);
+  var track  = pager.querySelector('#pager-track');
+  var dotsEl = pager.querySelector('#pager-dots');
+  var frame  = pager.querySelector('#pager-frame');
+  var vids = {};   // index → video element
+
+  pages.forEach(function (pg, i) {
+    var pgEl = document.createElement('div');
+    pgEl.className = 'pg-page';
+    if (pg.video) {
+      pgEl.classList.add('pg-video');
+      pgEl.innerHTML = '<video src="' + pg.video + '" muted loop playsinline preload="auto"></video>';
+      vids[i] = pgEl.querySelector('video');
+    } else {
+      pgEl.innerHTML =
+        '<div class="rp-title">' + (pg.title || ('頁面 ' + (i + 1))) + '</div>' +
+        '<div class="rp-line" style="width:70%"></div>' +
+        '<div class="rp-line" style="width:48%"></div>' +
+        '<div class="rp-btn">進入 &#8250;</div>';
+      pgEl.dataset.url = pg.url || '';
+    }
+    track.appendChild(pgEl);
+    var d = document.createElement('div');
+    d.className = 'pg-dot'; d.dataset.i = i;
+    dotsEl.appendChild(d);
+  });
+
+  var idx = 0, downX = null, dragX = 0, downT = 0;
+  function paint() {
+    track.classList.remove('nosnap');
+    track.style.transform = 'translateX(calc(' + (-idx * 100) + '% + 0px))';
+    for (var i = 0; i < dotsEl.children.length; i++) {
+      dotsEl.children[i].classList.toggle('on', i === idx);
+    }
+    // 影片頁：滑到才播放、滑走暫停
+    Object.keys(vids).forEach(function (k) {
+      var v = vids[k];
+      if (+k === idx) { if (v.paused) { try { var p = v.play(); if (p && p.catch) p.catch(function () {}); } catch (e) {} } }
+      else if (!v.paused) { v.pause(); }
+    });
+  }
+  function setPage(i) { idx = Math.max(0, Math.min(N - 1, i)); dragX = 0; paint(); }
+
+  // 滑動換頁：跟手拖曳 + 門檻/甩動判定
+  frame.addEventListener('pointerdown', function (e) {
+    if (e.button !== undefined && e.button !== 0) return;
+    downX = e.clientX; downT = performance.now(); dragX = 0;
+    track.classList.add('nosnap');
+  });
+  document.addEventListener('pointermove', function (e) {
+    if (downX === null) return;
+    dragX = e.clientX - downX;
+    track.style.transform = 'translateX(calc(' + (-idx * 100) + '% + ' + dragX + 'px))';
+  });
+  document.addEventListener('pointerup', function (e) {
+    if (downX === null) return;
+    var dx = e.clientX - downX, dt = performance.now() - downT;
+    downX = null;
+    var w = frame.offsetWidth || 1;
+    if (Math.abs(dx) > w * 0.18 || (Math.abs(dx) > 30 && dt < 280)) {
+      setPage(idx + (dx < 0 ? 1 : -1));
+    } else {
+      if (Math.abs(dx) < 6) {   // 視為點擊：分頁有 url 就前往
+        var el = e.target && e.target.closest ? e.target.closest('.pg-page') : null;
+        if (el && el.dataset.url) { window.location.href = el.dataset.url; }
+      }
+      setPage(idx);   // 彈回原頁
+    }
+  });
+  document.getElementById('ring-prev').addEventListener('click', function () { setPage(idx - 1); });
+  document.getElementById('ring-next').addEventListener('click', function () { setPage(idx + 1); });
+  dotsEl.addEventListener('click', function (e) {
+    var d = e.target && e.target.closest ? e.target.closest('.pg-dot') : null;
+    if (d) setPage(+d.dataset.i);
+  });
+  // 回到前景（切 App / 視窗遮蔽後返回）→ 恢復當前頁影片播放
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) paint();
+  });
+
+  // 入場顯示序列：光束閃爍點亮 → 分頁視窗由底往上展開
+  window.__ringReveal = function (done) {
+    if (revealed) { if (done) done(); return; }
+    revealed = true;
+    if (window.__sphereShow) window.__sphereShow();   // 球現身（與光束點亮同步）
+    root.classList.remove('pre-reveal');
+    root.classList.add('stage-beam', 'beam-on');
+    setTimeout(function () {
+      root.classList.remove('beam-on', 'stage-beam');
+      pager.classList.add('open');
+      root.classList.remove('no-arrows');
+      paint();
+      setTimeout(function () { if (done) done(); }, 700);
+    }, 1000);
+  };
+  // 保險絲：入場流程異常時 25 秒後直接顯示
+  setTimeout(function () {
+    if (!revealed) {
+      revealed = true;
+      if (window.__sphereShow) window.__sphereShow();
+      root.classList.remove('pre-reveal', 'no-arrows');
+      pager.classList.add('open');
+      paint();
+    }
+  }, 25000);
+
+  // 錨點跟隨：root 錨在球頂；光束高度動態計算，讓分頁底緣落在畫面 ~54% 高
+  root.style.setProperty('--beamW', '120px');
+  var arrowPrev = document.getElementById('ring-prev');
+  var arrowNext = document.getElementById('ring-next');
+  (function mtick() {
+    requestAnimationFrame(mtick);
+    var a = window.__ringAnchor;
+    var ax = a ? a.x : innerWidth * 0.5;
+    var ay = a ? a.y : innerHeight * 0.66;
+    root.style.left = ax + 'px';
+    root.style.top  = ay + 'px';
+    var bh = Math.max(36, Math.round(ay - innerHeight * 0.43));   // 分頁底緣 ~43% 高（越小面板越高）
+    root.style.setProperty('--beamH', bh + 'px');
+    // 左右箭頭對齊「影片視窗」的垂直中心（直接量測 frame 的實際螢幕位置）
+    var fr = frame.getBoundingClientRect();
+    if (fr.height > 2) {
+      var arrowTop = Math.round(fr.top + fr.height / 2 - 22) + 'px';
+      if (arrowPrev && arrowPrev.style.top !== arrowTop) arrowPrev.style.top = arrowTop;
+      if (arrowNext && arrowNext.style.top !== arrowTop) arrowNext.style.top = arrowTop;
+    }
+  })();
+  paint();
+  console.log('[Pager] ✓ 手機分頁投影就緒（' + N + ' 頁）');
+  return;   // ★ 手機不建 3D 橢圓環，以下全部桌機專屬
+}
+
 // ── 建立弧形視窗（窄玻璃條拼成圓柱曲面 + 平面內容層）──
 pages.forEach(function (pg, i) {
   var g = { strips: [], content: null, all: [] };
@@ -765,7 +1047,7 @@ pages.forEach(function (pg, i) {
 var RADIUS = 300;
 function layout() {
   var vw = innerWidth;
-  var panelW = Math.max(230, Math.min(310, vw * 0.16)) * PSCALE;  // 視窗寬（弦長）
+  var panelW = Math.max(230, Math.min(310, vw * 0.16)) * PSCALE;  // 視窗寬（弦長）；手機走 #pager 分支不會進來
   var panelH = Math.round(panelW * 0.58);
   var arcRad = PANEL_ARC * Math.PI / 180;
   RADIUS = Math.round(panelW / (2 * Math.sin(arcRad / 2)));       // 由弧度反推環半徑
@@ -937,7 +1219,10 @@ function tick() {
   // 錨點：Three.js 每幀發布展示球頂的螢幕座標；尚未就緒時用預設位置
   var a = window.__ringAnchor;
   if (a) { root.style.left = a.x + 'px'; root.style.top = a.y + 'px'; }
-  else   { root.style.left = (innerWidth * 0.79) + 'px'; root.style.top = (innerHeight * 0.83) + 'px'; }
+  else   {
+    var fx = (window.__isMobile && window.__isMobile()) ? 0.30 : 0.79;  // 尚無 3D 錨點時的預設位置
+    root.style.left = (innerWidth * fx) + 'px'; root.style.top = (innerHeight * 0.83) + 'px';
+  }
 }
 tick();
 window.__ringDebug = function () { return { angle: angle, snapTarget: snapTarget, fi: frontIndex(), vel: vel }; };
@@ -956,6 +1241,8 @@ var PC = window.PORTAL_CFG || {};
 function nv(x, d) { return (typeof x === 'number' && isFinite(x)) ? x : d; }
 var BOX = PC.box || { x0: 0.1917, y0: 0.2562, x1: 0.3494, y1: 0.5813 };
 var IMG_W = 2848, IMG_H = 1600;
+var PAN_X = 0;   // 全景平移（手機入場運鏡）
+window.__portalPan = function (px) { PAN_X = px || 0; resize(); };
 
 var gl = null;
 try {
@@ -1059,7 +1346,7 @@ var DPR_CAP = 1.5;
 function resize() {
   var W = innerWidth, H = innerHeight;
   var sc = Math.max(W / IMG_W, H / IMG_H);
-  var offX = (W - IMG_W * sc) / 2, offY = (H - IMG_H * sc) / 2;
+  var offX = (W - IMG_W * sc) / 2 + PAN_X, offY = (H - IMG_H * sc) / 2;
   cv.style.left = (BOX.x0 * IMG_W * sc + offX) + 'px';
   cv.style.top  = (BOX.y0 * IMG_H * sc + offY) + 'px';
   var cw = (BOX.x1 - BOX.x0) * IMG_W * sc, ch = (BOX.y1 - BOX.y0) * IMG_H * sc;
@@ -1362,17 +1649,19 @@ function initWebGL() {
     'uniform sampler2D uTex;',
     'uniform vec2  uDelta;',
     'uniform float uDamping;',
+    'uniform float uShift;',    // 全景平移（手機運鏡）：波場隨背景整體橫移（sim UV）
     'uniform vec4  uBlocker;',  // M 擋牆橢圓 (u, v, rx, ry)，rx<=0 表示停用
     'varying vec2 vUv;',
     'void main() {',
-    '  vec4 info = texture2D(uTex, vUv);',
+    '  vec2 sUv = vec2(vUv.x + uShift, vUv.y);',
+    '  vec4 info = texture2D(uTex, sUv);',
     '  vec2 dx = vec2(uDelta.x, 0.0);',
     '  vec2 dy = vec2(0.0, uDelta.y);',
     '  float average = (',
-    '    texture2D(uTex, vUv - dx).r +',
-    '    texture2D(uTex, vUv - dy).r +',
-    '    texture2D(uTex, vUv + dx).r +',
-    '    texture2D(uTex, vUv + dy).r',
+    '    texture2D(uTex, sUv - dx).r +',
+    '    texture2D(uTex, sUv - dy).r +',
+    '    texture2D(uTex, sUv + dx).r +',
+    '    texture2D(uTex, sUv + dy).r',
     '  ) * 0.25;',
     '  info.g += (average - info.r) * 2.0;',
     // 地平線消波帶：頂端 18% 加速衰減，避免波撞到模擬邊界反彈成亮帶
@@ -1523,11 +1812,19 @@ function initWebGL() {
   var bgTex = null, bgReady = false, imgW = 1, imgH = 1;
   var bgScaleU = [1, 1], bgOffU = [0, 0];
 
+  var PAN_X = 0;            // 全景平移（手機入場運鏡）
+  var PAN_SHIFT_PX = 0;     // 尚未套用到波場的平移量（px，下一幀 updateStep 消化）
+  window.__ripplePan = function (px) {
+    px = px || 0;
+    PAN_SHIFT_PX += (px - PAN_X);   // 波場跟著背景整體橫移 → 滑水痕不會疊在同一點
+    PAN_X = px;
+    computeBgTransform();
+  };
   function computeBgTransform() {
     var W = innerWidth, H = innerHeight;
     var sc    = Math.max(W / imgW, H / imgH);
     var dispW = imgW * sc, dispH = imgH * sc;
-    var offX  = (W - dispW) / 2, offY = (H - dispH) / 2;
+    var offX  = (W - dispW) / 2 + PAN_X, offY = (H - dispH) / 2;
     // 水面 UV (u,v) → 背景圖 UV（v=0 在畫布底 = 視口底）
     bgScaleU = [ W / dispW, -(1 - WATER_TOP) * H / dispH ];
     bgOffU   = [ -offX / dispW, (H - offY) / dispH ];
@@ -1569,9 +1866,9 @@ function initWebGL() {
   // ── 水滴投放 ──
   function dropAt(u, v, radiusPx, strength) {
     if (!texA) return;
-    // 擋牆內不投水滴（M 是實體）
+    // 擋牆內不投水滴（M 是實體；擋牆位置隨全景平移）
     if (Cblk.enabled !== false) {
-      var bdx = (u - nv(Cblk.u, 0.245)) / Math.max(0.001, nv(Cblk.rx, 0.13));
+      var bdx = (u - (nv(Cblk.u, 0.245) + PAN_X / Math.max(1, cssW))) / Math.max(0.001, nv(Cblk.rx, 0.13));
       var bdy = (v - nv(Cblk.v, 0.875)) / Math.max(0.001, nv(Cblk.ry, 0.07));
       if (bdx * bdx + bdy * bdy < 1.0) return;
     }
@@ -1590,7 +1887,7 @@ function initWebGL() {
     var tmp = texA; texA = texB; texB = tmp;
   }
 
-  function updateStep() {
+  function updateStep(shiftU) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, texB.fb);
     gl.viewport(0, 0, simW, simH);
     gl.useProgram(progUpdate.p);
@@ -1599,9 +1896,11 @@ function initWebGL() {
     gl.uniform1i(progUpdate.u.uTex, 0);
     gl.uniform2f(progUpdate.u.uDelta, 1 / simW, 1 / simH);
     gl.uniform1f(progUpdate.u.uDamping, nv(C.damping, 0.9955));
+    gl.uniform1f(progUpdate.u.uShift, shiftU || 0);
     if (Cblk.enabled !== false) {
+      // 擋牆跟著背景平移（M 門在畫面上的位置會隨運鏡移動）
       gl.uniform4f(progUpdate.u.uBlocker,
-        nv(Cblk.u, 0.245), nv(Cblk.v, 0.875),
+        nv(Cblk.u, 0.245) + PAN_X / Math.max(1, cssW), nv(Cblk.v, 0.875),
         Math.max(0.001, nv(Cblk.rx, 0.13)), Math.max(0.001, nv(Cblk.ry, 0.07)));
     } else {
       gl.uniform4f(progUpdate.u.uBlocker, 0, 0, -1, 1);
@@ -1678,7 +1977,8 @@ function initWebGL() {
       for (var k = 0; k < srcs.length; k++) {
         var dxPx = (srcs[k].u - lastFeet[k].u) * cssW;
         var dyPx = (srcs[k].v - lastFeet[k].v) * cssH;
-        var dist = Math.hypot(dxPx, dyPx);
+        // 運鏡跟拍時 ORO 在螢幕上近乎不動 → 把「相對水面」的移動量（背景平移）加回來，滑水痕才連續
+        var dist = Math.hypot(dxPx, dyPx) + Math.abs(PAN_SHIFT_PX);
         if (dist > 3) {
           moved = true;
           // 移動中：沿線每 spacing px 投一滴 → 連續滑水痕
@@ -1717,7 +2017,10 @@ function initWebGL() {
     if (!bgReady || !texA) return;
     oroWake(now);
     var iters = Math.max(1, Math.min(4, Math.round(nv(C.iters, 2))));
-    for (var i = 0; i < iters; i++) updateStep();
+    // 全景平移：波場橫移量只在每幀第一步消化（讀取方向與背景移動相反）
+    var shiftU = 0;
+    if (PAN_SHIFT_PX !== 0) { shiftU = -PAN_SHIFT_PX / Math.max(1, cssW); PAN_SHIFT_PX = 0; }
+    for (var i = 0; i < iters; i++) updateStep(i === 0 ? shiftU : 0);
     renderFrame();
   }
   requestAnimationFrame(loop);
@@ -1931,13 +2234,21 @@ eyeGlow.position.set(0.3, 0.5, 3); scene.add(eyeGlow);
     console.log('[Ring] ✓ 展示球 GLB 已載入');
   }, undefined, function () { /* 尚未放入 GLB → 使用佔位球 */ });
 
+  // 手機：入場運鏡期間球先隱藏（避免鏡頭橫移時球在畫面上快速漂過），光束點亮時才現身
+  if (window.__isMobile && window.__isMobile()) {
+    ringRoot.visible = false;
+    window.__sphereShow = function () { ringRoot.visible = true; };
+  }
+
   // ── 每幀：漂浮 + 發布「球頂螢幕座標」給 DOM 環狀選單當錨點 ──
   var anchorV = new THREE.Vector3();
   var BROT = ((typeof RC.ballRotDeg === 'number') ? RC.ballRotDeg : 0) * Math.PI / 180;
   window.__ringTick = function (tt) {
     ringRoot.position.y = RP.y + Math.sin(tt * 0.7) * 0.02;
     sphereGroup.rotation.y = BROT + Math.sin(tt * 0.4) * 0.10;   // 輕擺 ±6°（避開接縫）
-    anchorV.set(ringRoot.position.x, ringRoot.position.y + SR * 0.95, ringRoot.position.z);
+    // 錨點 y：手機用固定值（不含漂浮）→ 影片視窗不跟著球抖動、球自己漂就好；桌機維持跟隨
+    var anchorBaseY = (window.__isMobile && window.__isMobile()) ? RP.y : ringRoot.position.y;
+    anchorV.set(ringRoot.position.x, anchorBaseY + SR * 0.95, ringRoot.position.z);
     anchorV.project(camera);
     window.__ringAnchor = {
       x: (anchorV.x + 1) / 2 * innerWidth,
@@ -1959,6 +2270,22 @@ if (window.__calCfg) {
   if (typeof window.__calCfg.SCALE_START === 'number') SCALE_START = window.__calCfg.SCALE_START;
   if (typeof window.__calCfg.finalScale === 'number')  FINAL_SCALE = window.__calCfg.finalScale;
   if (typeof window.__calCfg.waterY === 'number')      WATER_BASE_Y = window.__calCfg.waterY;
+}
+// ── 手機版 v2（2026-07-17）：ORO 縮小當導覽員，入場運鏡跟拍，入場後側移到球左側並稍上浮 ──
+var IS_MOB            = (window.__isMobile && window.__isMobile());
+var ORO_MOBILE_MUL       = 0.72;  // ★ 手機 ORO 縮放倍率（相對桌機，含 calibrator 關鍵影格）
+var ORO_MOBILE_FX        = 0.21;  // ★ 手機 ORO 入場後停留的螢幕寬度比例（0.5=正中）
+var ORO_MOBILE_RAISE     = 0.10;  // ★ 手機 ORO 定位後上浮量（世界單位）
+var ORO_CAM_END_POINT    = 10;    // ★ 運鏡跟拍到第幾個路徑點後放手（畫面移回最終構圖，ORO 自行入畫）
+var ORO_MOBILE_TRAIL_END = 11;    // ★ 手機入場只走到第幾點就定位（桌機走完整路徑；截短後不再繞到畫面底）
+var ORO_MUL              = IS_MOB ? ORO_MOBILE_MUL : 1;   // 統一在 trailKeyframedScale 出口套用
+// 手機：入場路徑截短
+if (IS_MOB && window.waterTrailPath && window.waterTrailPath.length > ORO_MOBILE_TRAIL_END + 1) {
+  window.__mobTrail = window.waterTrailPath.slice(0, ORO_MOBILE_TRAIL_END + 1);
+}
+// 目前生效的入場路徑（手機=截短版；scale/rot 關鍵影格同步用這條）
+function activeTrail() {
+  return (IS_MOB && window.__mobTrail) ? window.__mobTrail : window.waterTrailPath;
 }
 var centerPos   = new THREE.Vector3(1.5, WATER_BASE_Y, 0);
 
@@ -1996,8 +2323,43 @@ function trailToWorld(nx, ny, imgW, imgH) {
   };
 }
 
+// 運鏡跟拍時，路徑投影必須以「未偏移的鏡頭」計算，避免鏡頭跟著 ORO、ORO 又跟著鏡頭的回饋漂移
+// （桌機 camera.x 恆為 0，此函式等同 trailToWorld）
+function trailToWorldStable(nx, ny, imgW, imgH) {
+  var cx = camera.position.x;
+  if (cx === 0) return trailToWorld(nx, ny, imgW, imgH);
+  camera.position.x = 0; camera.updateMatrixWorld(true);
+  var r = trailToWorld(nx, ny, imgW, imgH);
+  camera.position.x = cx; camera.updateMatrixWorld(true);
+  return r;
+}
+
+// ── 手機：頁面載入即把「視窗中心」對到 ORO 起點（入場運鏡從門口那側開始）──
+if (IS_MOB && window.__setScenePan) {
+  (function () {
+    var t0 = activeTrail();
+    if (!t0 || !t0.length || !window.waterTrailImgW) return;
+    var sc0  = Math.max(innerWidth / window.waterTrailImgW, innerHeight / window.waterTrailImgH);
+    var oX0  = (innerWidth - window.waterTrailImgW * sc0) / 2;
+    var defX = t0[0].nx * window.waterTrailImgW * sc0 + oX0;
+    var pan0 = Math.max(oX0, Math.min(-oX0, innerWidth * 0.5 - defX));
+    window.__setScenePan(pan0);
+    var w0 = trailToWorld(t0[0].nx, t0[0].ny, window.waterTrailImgW, window.waterTrailImgH);
+    if (w0) { camera.position.x = w0.x; camera.updateMatrixWorld(true); }
+  })();
+}
+
 // ORO 起點：對齊 trail 第一點 (nx≈0.20, 在 M 門輝光右緣)
 oroGroup.position.set(-2.5, centerPos.y, nyToZOffset(0.54));
+// 手機：入場前直接停在「截短路徑的第一點」（桌機停車位 -2.5 在手機運鏡下會露出來，且入場第一幀會跳位）
+if (IS_MOB && window.waterTrailImgW) {
+  (function () {
+    var t0 = activeTrail();
+    if (!t0 || !t0.length) return;
+    var pw0 = trailToWorldStable(t0[0].nx, t0[0].ny, window.waterTrailImgW, window.waterTrailImgH);
+    if (pw0) oroGroup.position.set(pw0.x, centerPos.y, pw0.z);
+  })();
+}
 
 var raycaster  = new THREE.Raycaster();
 var mouse2D    = new THREE.Vector2();
@@ -2072,7 +2434,7 @@ function updateFeetScreenPos() {
 
 // ── 路徑點鎖定角度 keyframe 內插（rotDeg 由 calibrator 匯出，鎖定點間線性內插）──
 function trailKeyframedRot(prog, autoRot) {
-  var trail = window.waterTrailPath;
+  var trail = activeTrail();
   if (!trail || trail.length < 2) return autoRot;
   var kf = [];
   for (var i = 0; i < trail.length; i++) {
@@ -2096,7 +2458,7 @@ function trailKeyframedRot(prog, autoRot) {
 // ── 尺寸 keyframe（scaleMul 由 calibrator 匯出，純手動制）──
 // 沒有尺寸鎖定 → 預設自動曲線；有鎖定 → 鎖定點前後維持、之間線性（不自動變大）
 function trailKeyframedScale(prog) {
-  var trail = window.waterTrailPath;
+  var trail = activeTrail();
   var kf = [];
   if (trail && trail.length > 1) {
     for (var i = 0; i < trail.length; i++) {
@@ -2105,17 +2467,18 @@ function trailKeyframedScale(prog) {
       }
     }
   }
-  if (!kf.length) return (SCALE_START + (1 - SCALE_START) * prog) * FINAL_SCALE;
+  // 注意：ORO_MUL 統一套在所有分支出口（手機縮小 0.5；桌機 =1 不變）
+  if (!kf.length) return (SCALE_START + (1 - SCALE_START) * prog) * FINAL_SCALE * ORO_MUL;
   var prev = null, next = null;
   for (var j = 0; j < kf.length; j++) {
     if (kf[j].prog <= prog) prev = kf[j];
     if (kf[j].prog >= prog && next === null) next = kf[j];
   }
-  if (!prev && next) return next.v;
-  if (!next && prev) return prev.v;
-  if (prev.prog === next.prog) return prev.v;
+  if (!prev && next) return next.v * ORO_MUL;
+  if (!next && prev) return prev.v * ORO_MUL;
+  if (prev.prog === next.prog) return prev.v * ORO_MUL;
   var t = (prog - prev.prog) / (next.prog - prev.prog);
-  return prev.v + (next.v - prev.v) * t;
+  return (prev.v + (next.v - prev.v) * t) * ORO_MUL;
 }
 
 // ── GLB 載入 ──
@@ -2150,7 +2513,7 @@ loader.load(
     oroGroup.userData.localBottomY = -halfH; // 輪子在 group 中心之下 halfH
     centerPos.y = WATER_BASE_Y + halfH * s; // 讓輪子貼水面基準 Y 時的 group 中心 Y
     // ─────────────────────────────────────────────────────────
-    oroGroup.scale.setScalar(s * SCALE_START * FINAL_SCALE);
+    oroGroup.scale.setScalar(s * SCALE_START * FINAL_SCALE * ORO_MUL);
     oroGroup.add(model);
     modelReady = true;
     oroPlaceholder.classList.add('hidden');
@@ -2379,7 +2742,7 @@ function animate() {
   var bs = oroGroup.userData.baseScale || 1;
 
   if (entranceState === 'sliding') {
-    var trail = window.waterTrailPath;
+    var trail = activeTrail();
     var lby   = oroGroup.userData.localBottomY || -1.1;
 
     // ── 第一幀初始化：計時 + 讓初始朝向對齊路徑第一段方向 ──
@@ -2387,8 +2750,8 @@ function animate() {
       entranceTStart = t;
       // 計算起始方向，避免第一幀轉身跳動
       if (trail && trail.length >= 2 && window.waterTrailImgW) {
-        var wpt0 = trailToWorld(trail[0].nx, trail[0].ny, window.waterTrailImgW, window.waterTrailImgH);
-        var wpt1 = trailToWorld(trail[1].nx, trail[1].ny, window.waterTrailImgW, window.waterTrailImgH);
+        var wpt0 = trailToWorldStable(trail[0].nx, trail[0].ny, window.waterTrailImgW, window.waterTrailImgH);
+        var wpt1 = trailToWorldStable(trail[1].nx, trail[1].ny, window.waterTrailImgW, window.waterTrailImgH);
         if (wpt0 && wpt1) {
           var dx0 = wpt1.x - wpt0.x, dz0 = wpt1.z - wpt0.z;
           if (dx0*dx0 + dz0*dz0 > 0.0001) {
@@ -2401,6 +2764,10 @@ function animate() {
 
     var SLIDE_DUR = (window.__calCfg && typeof window.__calCfg.simDur === 'number')
       ? window.__calCfg.simDur : 5.5;   // 入場時長：跟隨 calibrator 同步的「時長 s」
+    // 手機路徑截短 → 時長等比縮短（維持相同步速）
+    if (IS_MOB && window.__mobTrail && window.waterTrailPath && window.waterTrailPath.length > 1) {
+      SLIDE_DUR *= window.__mobTrail.length / window.waterTrailPath.length;
+    }
     var sp = Math.min((t - entranceTStart) / SLIDE_DUR, 1.0);
     var ep = easeInOutSine(sp);
 
@@ -2417,7 +2784,7 @@ function animate() {
       var cp = crTrail(trail, rawIdx);   // Catmull-Rom 平滑取樣
 
       // ── 腳輪精確貼合水路：Raycaster 投影 (nx,ny) 到 z=nyToZOffset 平面 ──
-      var wpt = trailToWorld(cp.nx, cp.ny, window.waterTrailImgW, window.waterTrailImgH);
+      var wpt = trailToWorldStable(cp.nx, cp.ny, window.waterTrailImgW, window.waterTrailImgH);
       if (wpt) {
         // 先設尺寸（位置計算需要 oroGroup.scale.y）；含 scaleMul 鎖定點
         oroGroup.scale.setScalar(bs * trailKeyframedScale(ep));
@@ -2431,7 +2798,7 @@ function animate() {
         // ── 面朝前進方向（前看 0.4 路徑步長，曲線取樣）───────────
         var fIdx = Math.min(rawIdx + 0.4, trail.length - 1);
         var cp2  = crTrail(trail, fIdx);
-        var wpt2 = trailToWorld(cp2.nx, cp2.ny, window.waterTrailImgW, window.waterTrailImgH);
+        var wpt2 = trailToWorldStable(cp2.nx, cp2.ny, window.waterTrailImgW, window.waterTrailImgH);
         var rotTarget = entranceRotY;
         if (wpt2) {
           var dx = wpt2.x - wpt.x, dz = wpt2.z - wpt.z;
@@ -2458,6 +2825,27 @@ function animate() {
       oroGroup.position.z = 0;
     }
 
+    // ── 手機入場運鏡（全景平移）：背景圖/水面/M門/3D 鏡頭同步橫移，
+    //    視窗中心跟著 ORO 到第 ORO_CAM_END_POINT 點 → 之後放手，畫面平滑移回最終構圖，ORO 自行入畫 ──
+    if (IS_MOB && trail && trail.length > 2 && window.waterTrailImgW && window.__setScenePan) {
+      var relProg = ep * (trail.length - 1);
+      var followW = 1;
+      if (relProg > ORO_CAM_END_POINT) {
+        var relT = (relProg - ORO_CAM_END_POINT) / Math.max(0.5, (trail.length - 1) - ORO_CAM_END_POINT);
+        followW = 1 - easeInOutSine(Math.min(1, relT));
+      }
+      // ORO 在「最終構圖」下的螢幕 x（cover 對齊數學，與 trailToWorld 相同）
+      var __sw = innerWidth, __sh = innerHeight;
+      var __sc = Math.max(__sw / window.waterTrailImgW, __sh / window.waterTrailImgH);
+      var __oX = (__sw - window.waterTrailImgW * __sc) / 2;
+      var __defX = cp.nx * window.waterTrailImgW * __sc + __oX;
+      var __pan = Math.max(__oX, Math.min(-__oX, (__sw * 0.5 - __defX) * followW));
+      window.__setScenePan(__pan);
+      // 3D 鏡頭同步：followW=1 時 ORO 恰好在畫面中央，followW=0 回到最終構圖
+      camera.position.x += ((oroGroup.position.x * followW) - camera.position.x) * 0.14;
+      camera.updateMatrixWorld(true);
+    }
+
     window.oroEnteringProgress = Math.sin(Math.PI * sp) * 0.88;
 
     updateFeetScreenPos();  // 腳輪底部 → 水波引擎滑水痕跡
@@ -2472,6 +2860,21 @@ function animate() {
       floatT0 = t;                   // 懸浮相位歸零：從靜止位置緩緩盪起
       setOroOpacity(1); fadeDone = true;
       window.oroEnteringProgress = 0;
+      // 手機：抵達中央後緩緩側移到球左側（像滑到舞台旁主持），把中央讓給展示球
+      if (IS_MOB) {
+        var __gr = new THREE.Raycaster();
+        var __gv = new THREE.Vector3(0, oroGroup.position.y, oroGroup.position.z).project(camera);
+        __gr.setFromCamera(new THREE.Vector2(ORO_MOBILE_FX * 2 - 1, __gv.y), camera);
+        var __gt = (oroGroup.position.z - __gr.ray.origin.z) / __gr.ray.direction.z;
+        window.__oroGlide = {
+          fromX: oroGroup.position.x,
+          toX:   __gr.ray.origin.x + __gt * __gr.ray.direction.x,
+          fromY: centerPos.y,
+          toY:   centerPos.y + ORO_MOBILE_RAISE,   // 側移同時稍微上浮
+          t0:    t + 0.6,   // 停頓 0.6s 再側移，銜接自然
+          dur:   1.5
+        };
+      }
       // 入場結束 → 光束閃爍點亮 → 橢圓圈 → 視窗展開 → ORO 自我介紹
       setTimeout(function () {
         if (window.__ringReveal) window.__ringReveal(function () { setTimeout(startIntro, 400); });
@@ -2480,6 +2883,28 @@ function animate() {
     }
   }
   else if (entranceState === 'done') {
+    // 手機：運鏡歸位（鏡頭與全景平移一起平滑收斂到最終構圖）
+    if (IS_MOB) {
+      if (Math.abs(camera.position.x) > 0.002) {
+        camera.position.x *= 0.94;
+        if (Math.abs(camera.position.x) < 0.002) camera.position.x = 0;
+        camera.updateMatrixWorld(true);
+      }
+      if (window.__setScenePan && Math.abs(window.__scenePanX || 0) > 0.6) {
+        window.__setScenePan(window.__scenePanX * 0.94);
+      }
+    }
+    // 手機側移＋上浮：入場結束後滑到球左側（easeInOutSine，划水感）
+    if (window.__oroGlide) {
+      var __g = window.__oroGlide;
+      if (t >= __g.t0) {
+        var __gp = easeInOutSine(Math.min(1, (t - __g.t0) / __g.dur));
+        centerPos.x = __g.fromX + (__g.toX - __g.fromX) * __gp;
+        centerPos.y = __g.fromY + (__g.toY - __g.fromY) * __gp;
+        oroGroup.position.x = centerPos.x;
+        if (__gp >= 1) window.__oroGlide = null;
+      }
+    }
     // 停在路徑終點懸浮：sin 相位歸零 + 前 2.5 秒振幅漸增 → 銜接無跳動
     var ft = t - floatT0;
     oroGroup.position.y = centerPos.y +
